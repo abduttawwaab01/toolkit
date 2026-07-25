@@ -30,7 +30,6 @@ model User {
   files        ProjectFile[]
   aiUsageLogs  AiUsageLog[]
   subscription Subscription?
-  documents    Document[]
   purchaseRequests CreditPurchaseRequest[]
   creditSpends    CreditSpendLog[]
 }
@@ -153,59 +152,6 @@ model PlatformSetting {
   category  String   @default("general")
   type      String   @default("string")
   updatedAt DateTime @updatedAt
-}
-
-model Document {
-  id          String   @id @default(uuid())
-  userId      String
-  title       String
-  description String?
-  content     Json     @default("{}")
-  format      String   @default("rich")
-  mimeType    String   @default("text/html")
-  extension   String   @default("html")
-  size        BigInt   @default(0)
-  wordCount   Int      @default(0)
-  isArchived  Boolean  @default(false)
-  isTemplate  Boolean  @default(false)
-  templateId  String?
-  tags        String   @default("[]")
-  metadata    Json     @default("{}")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  lastOpenedAt DateTime?
-
-  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  versions DocumentVersion[]
-}
-
-model DocumentVersion {
-  id         String   @id @default(uuid())
-  documentId String
-  version    Int      @default(1)
-  content    Json     @default("{}")
-  title      String
-  size       BigInt   @default(0)
-  wordCount  Int      @default(0)
-  metadata   Json     @default("{}")
-  createdAt  DateTime @default(now())
-
-  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-}
-
-model DocumentTemplate {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  category    String   @default("general")
-  content     Json     @default("{}")
-  format      String   @default("rich")
-  thumbnail   String?
-  isPublic    Boolean  @default(true)
-  usageCount  Int      @default(0)
-  metadata    Json     @default("{}")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
 }
 
 model BankDetail {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { BarChart3, Users, Clock, Puzzle, Settings, ScrollText, Megaphone, FileText, CreditCard } from "lucide-react";
+import { BarChart3, Users, Clock, Puzzle, Settings, ScrollText, Megaphone, CreditCard } from "lucide-react";
 import { AdminOverview } from "@/components/admin/admin-overview";
 import { AdminUsers } from "@/components/admin/admin-users";
 import { AdminStorageConfig } from "@/components/admin/admin-storage-config";
@@ -10,7 +10,6 @@ import { AdminFeatures } from "@/components/admin/admin-features";
 import { AdminPlatformSettings } from "@/components/admin/admin-platform-settings";
 import { AdminAuditLog } from "@/components/admin/admin-audit-log";
 import { AdminAnnouncements } from "@/components/admin/admin-announcements";
-import { AdminDocuments } from "@/components/admin/admin-documents";
 import { AdminCredits } from "@/components/admin/admin-credits";
 
 const tabs = [
@@ -21,7 +20,6 @@ const tabs = [
   { id: "platform", label: "Platform", icon: Settings },
   { id: "audit", label: "Audit Log", icon: ScrollText },
   { id: "announcements", label: "Announcements", icon: Megaphone },
-  { id: "documents", label: "Documents", icon: FileText },
   { id: "credits", label: "Credits", icon: CreditCard },
 ] as const;
 
@@ -37,7 +35,6 @@ export default function AdminPage() {
       case "platform": return <AdminPlatformSettings />;
       case "audit": return <AdminAuditLog />;
       case "announcements": return <AdminAnnouncements />;
-      case "documents": return <AdminDocuments />;
       case "credits": return <AdminCredits />;
       default: return <AdminOverview />;
     }

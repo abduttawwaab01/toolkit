@@ -217,8 +217,8 @@ export function DocumentVersions() {
                     </div>
                     <p className="text-xs text-text-tertiary mt-0.5">{formatDate(version.createdAt)}</p>
                     <div className="flex items-center gap-3 mt-1.5 text-[11px] text-text-tertiary">
-                      <span>{version.wordCount.toLocaleString()} words</span>
-                      <span>{formatBytes(version.size)}</span>
+                      <span>{(version.wordCount ?? 0).toLocaleString()} words</span>
+                      <span>{formatBytes(version.size ?? 0)}</span>
                     </div>
                   </div>
 
@@ -263,8 +263,8 @@ export function DocumentVersions() {
 
                 <GlassCard className="p-4">
                   <h4 className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-3">Content Preview</h4>
-                  <p className="text-sm font-mono text-text-secondary whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
-                    {formatContent(previewing.content)}
+                    <p className="text-sm font-mono text-text-secondary whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
+                    {formatContent(previewing.content ?? {})}
                   </p>
                 </GlassCard>
 
@@ -272,8 +272,8 @@ export function DocumentVersions() {
                   <GlassCard className="p-4">
                     <h4 className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-3">Diff</h4>
                     <DiffView
-                      oldContent={formatContent(previewing.content)}
-                      newContent={formatContent(selectedVersion.content)}
+                      oldContent={formatContent(previewing.content ?? {})}
+                      newContent={formatContent(selectedVersion.content ?? {})}
                     />
                   </GlassCard>
                 )}

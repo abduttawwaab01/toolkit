@@ -125,7 +125,7 @@ export function DocumentStatsBar() {
             <div className="w-px h-3 bg-border-subtle" />
             <div className="flex items-center gap-1">
               <HardDrive className="size-3" />
-              <span>{formatBytes(currentDocument.size)}</span>
+              <span>{formatBytes(currentDocument.size ?? 0)}</span>
             </div>
           </>
         )}

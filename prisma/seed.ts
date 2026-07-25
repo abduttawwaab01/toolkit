@@ -29,13 +29,7 @@ async function main() {
       USER: { freePerDay: 3, freePerWeek: 15, freePerMonth: 50, freePerYear: 500, creditsPerExport: 1, creditsPerMinute: 1 },
       ADMIN: { freePerDay: 9999, freePerWeek: 9999, freePerMonth: 9999, freePerYear: 9999, creditsPerExport: 0, creditsPerMinute: 0 },
     };
-    const docLimits: Record<string, Record<string, any>> = {
-      GUEST: { maxDocuments: 5, maxDocumentSizeKB: 1024, allowedDocFormats: '["txt","md","html"]' },
-      USER: { maxDocuments: 50, maxDocumentSizeKB: 5120, allowedDocFormats: '["txt","md","html","pdf","docx","rtf"]' },
-      ADMIN: { maxDocuments: 99999, maxDocumentSizeKB: 102400, allowedDocFormats: '["txt","md","html","pdf","docx","rtf"]' },
-    };
     const exportLabels: Record<string, string> = { freePerDay: "Free Exports Per Day", freePerWeek: "Free Exports Per Week", freePerMonth: "Free Exports Per Month", freePerYear: "Free Exports Per Year", creditsPerExport: "Credits Per Export", creditsPerMinute: "Credits Per Minute" };
-    const docLabels: Record<string, string> = { maxDocuments: "Max Documents", maxDocumentSizeKB: "Max Document Size (KB)", allowedDocFormats: "Allowed Document Formats" };
 
     for (const [field, value] of Object.entries(exportLimits[role])) {
       const key = `export_limit_${role}_${field}`;
@@ -43,14 +37,6 @@ async function main() {
         where: { key },
         update: { value: String(value) },
         create: { key, value: String(value), label: `${role} - ${exportLabels[field]}`, category: "export-limits", type: "number" },
-      });
-    }
-    for (const [field, value] of Object.entries(docLimits[role])) {
-      const key = `doc_limit_${role}_${field}`;
-      await prisma.platformSetting.upsert({
-        where: { key },
-        update: { value: String(value) },
-        create: { key, value: String(value), label: `${role} - ${docLabels[field]}`, category: "documents", type: field === "allowedDocFormats" ? "string" : "number" },
       });
     }
   }
@@ -73,10 +59,7 @@ async function main() {
     { key: "export-4k", label: "4K Export", enabled: true, roles: '["ADMIN","USER"]' },
     { key: "team-collaboration", label: "Team Collaboration", enabled: false, roles: '["ADMIN"]' },
     { key: "api-access", label: "API Access", enabled: false, roles: '["ADMIN"]' },
-    { key: "document-editor", label: "Document Editor", enabled: true, roles: '["ADMIN","USER","GUEST"]' },
-    { key: "document-converter", label: "Document Converter", enabled: true, roles: '["ADMIN","USER"]' },
-    { key: "document-templates", label: "Document Templates", enabled: true, roles: '["ADMIN","USER"]' },
-    { key: "document-export", label: "Document Export", enabled: true, roles: '["ADMIN","USER","GUEST"]' },
+
   ];
 
   for (const f of features) {

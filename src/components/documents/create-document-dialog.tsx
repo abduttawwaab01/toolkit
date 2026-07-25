@@ -14,7 +14,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { DocumentFormat } from "@/types/document";
+import { useDocumentStore } from "@/lib/document-store";
+import type { DocumentFormat, Document } from "@/types/document";
 
 interface FormatOption {
   id: DocumentFormat;
@@ -68,7 +69,7 @@ const FORMAT_OPTIONS: FormatOption[] = [
 interface CreateDocumentDialogProps {
   open: boolean;
   onClose: () => void;
-  onCreated: (doc: { id: string }) => void;
+  onCreated: (doc: Document) => void;
 }
 
 export function CreateDocumentDialog({ open, onClose, onCreated }: CreateDocumentDialogProps) {
@@ -77,8 +78,9 @@ export function CreateDocumentDialog({ open, onClose, onCreated }: CreateDocumen
   const [format, setFormat] = useState<DocumentFormat>("rich");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const createDocument = useDocumentStore((s) => s.createDocument);
 
   const reset = useCallback(() => {
     setTitle("");
@@ -106,38 +108,21 @@ export function CreateDocumentDialog({ open, onClose, onCreated }: CreateDocumen
     setTags((prev) => prev.filter((t) => t !== tag));
   }, []);
 
-  const handleCreate = useCallback(async () => {
+  const handleCreate = useCallback(() => {
     if (!title.trim() || title.length > 200) return;
-
-    setLoading(true);
-    setError(null);
-
     try {
-      const res = await fetch("/api/documents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim() || undefined,
-          format,
-          tags,
-        }),
+      const doc = createDocument({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        format,
+        tags,
       });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "Failed to create document");
-      }
-
-      const doc = await res.json();
       reset();
       onCreated(doc);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create document");
-    } finally {
-      setLoading(false);
     }
-  }, [title, description, format, tags, reset, onCreated]);
+  }, [title, description, format, tags, reset, onCreated, createDocument]);
 
   const selectedFormat = FORMAT_OPTIONS.find((f) => f.id === format)!;
 
@@ -304,13 +289,12 @@ export function CreateDocumentDialog({ open, onClose, onCreated }: CreateDocumen
             </div>
 
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-subtle">
-              <Button variant="ghost" size="sm" onClick={handleClose} disabled={loading}>
+              <Button variant="ghost" size="sm" onClick={handleClose}>
                 Cancel
               </Button>
               <Button
                 variant="primary"
                 size="sm"
-                loading={loading}
                 onClick={handleCreate}
                 disabled={!title.trim() || title.length > 200}
               >

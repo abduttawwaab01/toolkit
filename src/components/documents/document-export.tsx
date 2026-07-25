@@ -16,9 +16,6 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { cn, formatBytes } from "@/lib/utils";
 import { useDocumentStore } from "@/lib/document-store";
-import { useExportCredits } from "@/hooks/use-export-credits";
-import { CreditSpendDialog } from "@/components/credits/credit-spend-dialog";
-import { CreditPurchaseModal } from "@/components/credits/credit-purchase-modal";
 
 interface ExportFormat {
   id: string;
@@ -74,19 +71,26 @@ const EXPORT_FORMATS: ExportFormat[] = [
   },
 ];
 
+function generateDocxContent(content: string, title: string): Blob {
+  const html = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><title>${title}</title>
+<style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.5;}p{margin:0 0 6pt 0;}</style>
+</head><body>${content.replace(/\n/g, "<br>")}</body></html>`;
+  return new Blob([html], { type: "application/msword" });
+}
+
 export function DocumentExport() {
-  const { currentDocument, rawContent, setActivePanel, setShowExportDialog } = useDocumentStore();
+  const { currentDocument, rawContent, setActivePanel } = useDocumentStore();
   const [selectedFormat, setSelectedFormat] = useState<string>("html");
   const [fileName, setFileName] = useState(currentDocument?.title ?? "document");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [exported, setExported] = useState(false);
-  const credits = useExportCredits();
 
   const estimateSize = useCallback(() => {
     const charBytes = new TextEncoder().encode(rawContent).length;
-    const format = EXPORT_FORMATS.find((f) => f.id === selectedFormat);
     if (selectedFormat === "html") return charBytes * 1.5;
     if (selectedFormat === "docx") return charBytes * 3.5;
     if (selectedFormat === "md") return charBytes;
@@ -98,50 +102,30 @@ export function DocumentExport() {
     setError(null);
 
     try {
-      const allowed = await credits.checkExportCredits(0);
-      if (!allowed) {
-        setLoading(false);
-        return;
-      }
-
       const format = EXPORT_FORMATS.find((f) => f.id === selectedFormat);
       if (!format) throw new Error("Invalid format");
 
-      const res = await fetch("/api/documents/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          documentId: currentDocument?.id,
-          format: selectedFormat,
-          content: rawContent,
-          title: fileName,
-        }),
-      });
+      let content = rawContent;
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "Export failed");
+      if (format.id === "html" && !content.trim().startsWith("<")) {
+        content = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${fileName}</title></head><body>${content.replace(/\n/g, "<br>")}</body></html>`;
       }
 
-      if (selectedFormat === "docx") {
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${fileName}${format.ext}`;
-        a.click();
-        URL.revokeObjectURL(url);
+      let blob: Blob;
+      if (format.id === "docx") {
+        blob = generateDocxContent(content, fileName);
       } else {
-        const data = await res.json();
-        setPreview(data.content);
-        const blob = new Blob([data.content], { type: format.mime });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${fileName}${format.ext}`;
-        a.click();
-        URL.revokeObjectURL(url);
+        blob = new Blob([content], { type: format.mime });
       }
+
+      setPreview(content.slice(0, 500));
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${fileName}${format.ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
 
       setExported(true);
       setTimeout(() => setExported(false), 3000);
@@ -150,7 +134,7 @@ export function DocumentExport() {
     } finally {
       setLoading(false);
     }
-  }, [selectedFormat, fileName, rawContent, currentDocument, credits]);
+  }, [selectedFormat, fileName, rawContent]);
 
   return (
     <motion.div
@@ -289,22 +273,6 @@ export function DocumentExport() {
           </Button>
         </div>
       </GlassCard>
-
-      {credits.showSpendDialog && (
-        <CreditSpendDialog
-          feature="export"
-          featureLabel="Document Export"
-          creditsCost={credits.pendingCost}
-          onSpend={credits.confirmSpend}
-          onCancel={credits.cancelSpend}
-          loading={credits.spending}
-        />
-      )}
-
-      <CreditPurchaseModal
-        open={credits.showPurchaseModal}
-        onClose={() => credits.setShowPurchaseModal(false)}
-      />
     </motion.div>
   );
 }

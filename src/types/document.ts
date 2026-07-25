@@ -3,20 +3,20 @@ export type DocumentExtension = 'html' | 'md' | 'txt' | 'pdf' | 'docx' | 'rtf';
 
 export interface Document {
   id: string;
-  userId: string;
+  userId?: string;
   title: string;
   description?: string;
-  content: Record<string, unknown>; // TipTap JSON content
+  content?: Record<string, unknown>; // TipTap JSON content
   format: DocumentFormat;
-  mimeType: string;
-  extension: DocumentExtension;
-  size: number; // bytes
+  mimeType?: string;
+  extension?: DocumentExtension;
+  size?: number; // bytes
   wordCount: number;
-  isArchived: boolean;
-  isTemplate: boolean;
+  isArchived?: boolean;
+  isTemplate?: boolean;
   templateId?: string;
-  tags: string; // JSON string array
-  metadata: Record<string, unknown>;
+  tags?: string; // JSON string array
+  metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
   lastOpenedAt?: string;
@@ -27,11 +27,11 @@ export interface DocumentVersion {
   id: string;
   documentId: string;
   version: number;
-  content: Record<string, unknown>;
+  content?: Record<string, unknown>;
   title: string;
-  size: number;
-  wordCount: number;
-  metadata: Record<string, unknown>;
+  size?: number;
+  wordCount?: number;
+  metadata?: Record<string, unknown>;
   createdAt: string;
 }
 

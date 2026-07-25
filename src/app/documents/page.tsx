@@ -16,12 +16,10 @@ import {
   ArrowRightLeft,
   Download,
   Loader2,
-  ChevronDown,
   Tag,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { GlassCard } from "@/components/ui/glass-card";
 import { cn, formatBytes } from "@/lib/utils";
 import { useDocumentStore } from "@/lib/document-store";
 import { DocumentList } from "@/components/documents/document-list";
@@ -45,10 +43,10 @@ export default function DocumentsPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarTab, setSidebarTab] = useState<"info" | "convert" | "versions" | "export">("info");
-  const [stats, setStats] = useState<{ totalDocuments: number; totalSize: number; totalWords: number } | null>(null);
-  const [saveTimeout, setSaveTimeoutRef] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
+    documents,
     currentDocument,
     setCurrentDocument,
     setEditorContent,
@@ -61,72 +59,62 @@ export default function DocumentsPage() {
     setVersions,
     isDirty,
     isSaving,
+    loadDocuments,
+    saveCurrentDocument,
     reset,
   } = useDocumentStore();
 
-  const handleSelectDocument = useCallback(async (doc: Document) => {
-    try {
-      const res = await fetch(`/api/documents/${doc.id}`);
-      if (!res.ok) throw new Error("Failed to load document");
-      const data = await res.json();
-      setCurrentDocument(data);
-      setEditorContent(data.content || {});
-      setRawContent(typeof data.content === "string" ? data.content : JSON.stringify(data.content || {}, null, 2));
-      setWordCount(data.wordCount || 0);
-      setCharCount(JSON.stringify(data.content || "").length);
-      if (data.versions) setVersions(data.versions);
-      setIsDirty(false);
-      setView("editor");
-      setSidebarTab("info");
-    } catch {
-      // Silently fail — document list still shows
-    }
-  }, [setCurrentDocument, setEditorContent, setRawContent, setWordCount, setCharCount, setVersions, setIsDirty]);
-
-  const handleCreateDocument = useCallback((doc: { id: string }) => {
-    // Fetch and open the new document
-    fetch(`/api/documents/${doc.id}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setCurrentDocument(data);
-        setEditorContent(data.content || {});
-        setRawContent(typeof data.content === "string" ? data.content : JSON.stringify(data.content || {}, null, 2));
-        setWordCount(0);
-        setCharCount(0);
-        setIsDirty(false);
-        setView("editor");
-        setSidebarTab("info");
-      })
-      .catch(() => {});
-  }, [setCurrentDocument, setEditorContent, setRawContent, setWordCount, setCharCount, setIsDirty]);
-
-  const handleSave = useCallback(async () => {
-    if (!currentDocument) return;
-    setIsSaving(true);
-    try {
-      const content = useDocumentStore.getState().editorContent;
-      const raw = useDocumentStore.getState().rawContent;
-      const wc = useDocumentStore.getState().wordCount;
-      const cc = raw.length;
-      const res = await fetch(`/api/documents/${currentDocument.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content,
-          wordCount: wc,
-          size: cc,
-        }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setCurrentDocument(updated);
-        setLastSaved(new Date().toISOString());
-        setIsDirty(false);
+  const stats = documents.length > 0
+    ? {
+        totalDocuments: documents.length,
+        totalSize: documents.reduce((s, d) => s + (d.size || 0), 0),
+        totalWords: documents.reduce((s, d) => s + (d.wordCount || 0), 0),
       }
-    } finally {
-      setIsSaving(false);
+    : null;
+
+  useEffect(() => {
+    loadDocuments();
+  }, [loadDocuments]);
+
+  const loadDocVersions = useCallback((docId: string) => {
+    const stored = localStorage.getItem(`toolkit-versions-${docId}`);
+    if (stored) {
+      try { setVersions(JSON.parse(stored)); } catch { setVersions([]); }
+    } else {
+      setVersions([]);
     }
-  }, [currentDocument, setCurrentDocument, setIsSaving, setLastSaved, setIsDirty]);
+  }, [setVersions]);
+
+  const handleSelectDocument = useCallback((doc: Document) => {
+    setCurrentDocument(doc);
+    setEditorContent(doc.content as Record<string, unknown>);
+    const raw = typeof doc.content === "string" ? doc.content : JSON.stringify(doc.content || {}, null, 2);
+    setRawContent(raw);
+    setWordCount(doc.wordCount || 0);
+    setCharCount(raw.length);
+    setIsDirty(false);
+    loadDocVersions(doc.id);
+    setView("editor");
+    setSidebarTab("info");
+  }, [setCurrentDocument, setEditorContent, setRawContent, setWordCount, setCharCount, setVersions, setIsDirty, loadDocVersions]);
+
+  const handleCreateDocument = useCallback((doc: Document) => {
+    setCurrentDocument(doc);
+    setEditorContent(doc.content as Record<string, unknown>);
+    const raw = typeof doc.content === "string" ? doc.content : JSON.stringify(doc.content || {}, null, 2);
+    setRawContent(raw);
+    setWordCount(0);
+    setCharCount(0);
+    setIsDirty(false);
+    setVersions([]);
+    setView("editor");
+    setSidebarTab("info");
+  }, [setCurrentDocument, setEditorContent, setRawContent, setWordCount, setCharCount, setIsDirty, setVersions]);
+
+  const handleSave = useCallback(() => {
+    setIsSaving(true);
+    saveCurrentDocument();
+  }, [saveCurrentDocument, setIsSaving]);
 
   const handleContentChange = useCallback(
     (content: Record<string, unknown> | string) => {
@@ -137,41 +125,34 @@ export default function DocumentsPage() {
       }
       setIsDirty(true);
 
-      // Word count
       const raw = typeof content === "string" ? content : JSON.stringify(content);
       const words = raw.trim() ? raw.trim().split(/\s+/).length : 0;
       const chars = raw.length;
       setWordCount(words);
       setCharCount(chars);
 
-      // Debounced auto-save
-      if (saveTimeout) clearTimeout(saveTimeout);
-      const timeout = setTimeout(() => {
-        handleSave();
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => {
+        saveCurrentDocument();
       }, 3000);
-      setSaveTimeoutRef(timeout);
     },
-    [setEditorContent, setRawContent, setIsDirty, setWordCount, setCharCount, handleSave, saveTimeout],
+    [setEditorContent, setRawContent, setIsDirty, setWordCount, setCharCount, saveCurrentDocument],
   );
 
   const handleBack = useCallback(() => {
     if (isDirty) {
-      handleSave().then(() => {
-        reset();
-        setView("dashboard");
-      });
-    } else {
-      reset();
-      setView("dashboard");
+      saveCurrentDocument();
     }
-  }, [isDirty, handleSave, reset]);
+    reset();
+    loadDocuments();
+    setView("dashboard");
+  }, [isDirty, saveCurrentDocument, reset, loadDocuments]);
 
-  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
-      if (saveTimeout) clearTimeout(saveTimeout);
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [saveTimeout]);
+  }, []);
 
   const sidebarItems = [
     { id: "info" as const, label: "Info", icon: FileText },
@@ -194,7 +175,6 @@ export default function DocumentsPage() {
             exit={{ opacity: 0 }}
             className="flex flex-col h-full"
           >
-            {/* Dashboard Header */}
             <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <a href="/" className="size-10 rounded-xl bg-glass-medium border border-border-subtle flex items-center justify-center text-text-tertiary hover:text-text-primary hover:bg-glass-heavy transition-colors">
@@ -216,7 +196,6 @@ export default function DocumentsPage() {
               </Button>
             </div>
 
-            {/* Stats Row */}
             {stats && (
               <div className="px-6 py-3 flex gap-4 border-b border-border-subtle/50">
                 {[
@@ -232,7 +211,6 @@ export default function DocumentsPage() {
               </div>
             )}
 
-            {/* Document List */}
             <div className="flex-1 overflow-y-auto px-6 py-4">
               <DocumentList onEdit={handleSelectDocument} />
             </div>
@@ -245,7 +223,6 @@ export default function DocumentsPage() {
             exit={{ opacity: 0 }}
             className="flex flex-col h-full"
           >
-            {/* Editor Top Bar */}
             <div className="h-12 px-3 flex items-center gap-2 border-b border-border-subtle bg-surface-secondary shrink-0">
               <Button variant="ghost" size="sm" onClick={handleBack} className="gap-1.5">
                 <ArrowLeft className="size-3.5" />
@@ -301,9 +278,7 @@ export default function DocumentsPage() {
               )}
             </div>
 
-            {/* Editor Body */}
             <div className="flex flex-1 min-h-0">
-              {/* Sidebar */}
               <AnimatePresence>
                 {sidebarOpen && currentDocument && (
                   <motion.div
@@ -314,7 +289,6 @@ export default function DocumentsPage() {
                     className="border-r border-border-subtle bg-surface-secondary overflow-hidden shrink-0"
                   >
                     <div className="w-[280px] h-full flex flex-col">
-                      {/* Sidebar Tabs */}
                       <div className="flex border-b border-border-subtle">
                         {sidebarItems.map((item) => {
                           const Icon = item.icon;
@@ -336,7 +310,6 @@ export default function DocumentsPage() {
                         })}
                       </div>
 
-                      {/* Sidebar Content */}
                       <div className="flex-1 overflow-y-auto p-4">
                         {sidebarTab === "info" && (
                           <div className="space-y-4">
@@ -393,19 +366,19 @@ export default function DocumentsPage() {
                               <div className="space-y-1.5 text-xs text-text-secondary">
                                 <div className="flex justify-between">
                                   <span>Created</span>
-                                  <span>{currentDocument ? new Date(currentDocument.createdAt).toLocaleDateString() : "—"}</span>
+                                  <span>{currentDocument ? new Date(currentDocument.createdAt).toLocaleDateString() : "\u2014"}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span>Updated</span>
-                                  <span>{currentDocument ? new Date(currentDocument.updatedAt).toLocaleDateString() : "—"}</span>
+                                  <span>{currentDocument ? new Date(currentDocument.updatedAt).toLocaleDateString() : "\u2014"}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span>Size</span>
-                                  <span>{currentDocument ? formatBytes(currentDocument.size) : "—"}</span>
+                                  <span>{currentDocument ? formatBytes(currentDocument.size ?? 0) : "\u2014"}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span>Words</span>
-                                  <span>{currentDocument?.wordCount?.toLocaleString() ?? "—"}</span>
+                                  <span>{currentDocument?.wordCount?.toLocaleString() ?? "\u2014"}</span>
                                 </div>
                               </div>
                             </div>
@@ -421,7 +394,6 @@ export default function DocumentsPage() {
                 )}
               </AnimatePresence>
 
-              {/* Main Editor Area */}
               <div className="flex-1 flex flex-col min-w-0">
                 {currentDocument ? (
                   <>

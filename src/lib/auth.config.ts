@@ -22,6 +22,41 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    async signIn({ user, account }) {
+      if (account?.provider === "credentials") return true;
+
+      const email = user.email;
+      if (!email) return false;
+
+      const existing = await db.user.findUnique({ where: { email } });
+      if (existing) {
+        if (existing.isSuspended) return false;
+        const updated = await db.user.update({
+          where: { email },
+          data: {
+            name: user.name || existing.name,
+            image: user.image || existing.image,
+            lastActiveAt: new Date(),
+          },
+        });
+        user.id = updated.id;
+        (user as any).role = updated.role;
+        return true;
+      }
+
+      const created = await db.user.create({
+        data: {
+          email,
+          name: user.name,
+          image: user.image,
+          role: "USER",
+          creditsBalance: 5,
+        },
+      });
+      user.id = created.id;
+      (user as any).role = created.role;
+      return true;
+    },
     async jwt({ token, user }) {
       if (user) { (token as any).role = (user as any).role; token.id = user.id; }
       return token;

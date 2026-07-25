@@ -1,22 +1,4 @@
-import { NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth.config";
-import { jsonResponse } from "@/lib/json";
-import { z } from "zod";
 import { marked } from "marked";
-
-async function requireAuth() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return null;
-  return { userId: (session.user as any).id as string, role: (session.user as any).role as string };
-}
-
-const convertBodySchema = z.object({
-  fromFormat: z.enum(["rich", "markdown", "text", "html"]),
-  toFormat: z.enum(["rich", "markdown", "text", "html"]),
-  content: z.string(),
-  title: z.string().optional(),
-});
 
 function stripHtml(html: string): string {
   return html
@@ -106,18 +88,22 @@ function richToHtml(content: any): string {
 
   function renderNode(node: any): string {
     if (node.type === "text") return node.text || "";
-    const children = (node.content || []).map(renderNode).join("");
+    const marks = node.marks || [];
+    let children = (node.content || []).map(renderNode).join("");
+    for (const mark of marks) {
+      if (mark.type === "bold") children = `<strong>${children}</strong>`;
+      if (mark.type === "italic") children = `<em>${children}</em>`;
+      if (mark.type === "code") children = `<code>${children}</code>`;
+      if (mark.type === "link") children = `<a href="${mark.attrs?.href || ""}">${children}</a>`;
+      if (mark.type === "strike") children = `<s>${children}</s>`;
+      if (mark.type === "underline") children = `<u>${children}</u>`;
+    }
     switch (node.type) {
       case "paragraph": return `<p>${children}</p>`;
       case "heading": {
         const level = node.attrs?.level || 1;
         return `<h${level}>${children}</h${level}>`;
       }
-      case "bold":
-      case "strong": return `<strong>${children}</strong>`;
-      case "italic":
-      case "emphasis": return `<em>${children}</em>`;
-      case "code": return `<code>${children}</code>`;
       case "codeBlock": return `<pre><code>${children}</code></pre>`;
       case "bulletList": return `<ul>${children}</ul>`;
       case "orderedList": return `<ol>${children}</ol>`;
@@ -125,7 +111,6 @@ function richToHtml(content: any): string {
       case "blockquote": return `<blockquote>${children}</blockquote>`;
       case "hardBreak": return "<br>";
       case "horizontalRule": return "<hr>";
-      case "link": return `<a href="${node.attrs?.href || ""}">${children}</a>`;
       case "image": return `<img src="${node.attrs?.src || ""}" alt="${node.attrs?.alt || ""}">`;
       default: return children;
     }
@@ -179,7 +164,7 @@ function htmlToRich(html: string): any {
   return { type: "doc", content };
 }
 
-function convertContent(fromFormat: string, toFormat: string, content: string): string {
+export function convertContent(fromFormat: string, toFormat: string, content: string): string {
   if (fromFormat === toFormat) return content;
 
   const key = `${fromFormat}->${toFormat}`;
@@ -224,33 +209,5 @@ function convertContent(fromFormat: string, toFormat: string, content: string): 
     }
     default:
       throw new Error(`Unsupported conversion: ${key}`);
-  }
-}
-
-const OUTPUT_MAP: Record<string, { mimeType: string; extension: string }> = {
-  rich: { mimeType: "application/json", extension: "json" },
-  markdown: { mimeType: "text/markdown", extension: "md" },
-  text: { mimeType: "text/plain", extension: "txt" },
-  html: { mimeType: "text/html", extension: "html" },
-};
-
-export async function POST(req: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth) return jsonResponse({ error: "Unauthorized" }, { status: 401 });
-
-  const body = await req.json();
-  const parsed = convertBodySchema.safeParse(body);
-  if (!parsed.success) {
-    return jsonResponse({ error: "Invalid body", details: parsed.error.flatten() }, { status: 400 });
-  }
-
-  const { fromFormat, toFormat, content } = parsed.data;
-
-  try {
-    const converted = convertContent(fromFormat, toFormat, content);
-    const { mimeType, extension } = OUTPUT_MAP[toFormat];
-    return jsonResponse({ success: true, content: converted, mimeType, extension });
-  } catch (err: any) {
-    return jsonResponse({ success: false, error: err.message || "Conversion failed" }, { status: 400 });
   }
 }

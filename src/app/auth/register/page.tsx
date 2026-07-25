@@ -8,32 +8,49 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { APP_NAME } from "@/lib/constants";
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleLogin = async (e: FormEvent) => {
+  const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!email.trim() || !password.trim()) {
-      setError("Email and password are required");
+    if (!name.trim() || !email.trim() || !password.trim()) {
+      setError("All fields are required");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
       return;
     }
 
     setLoading(true);
     try {
-      const result = await signIn("credentials", {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password, name: name.trim() }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Registration failed");
+        return;
+      }
+
+      const signInResult = await signIn("credentials", {
         email: email.trim(),
         password,
         redirect: false,
       });
 
-      if (result?.error) {
-        setError("Invalid email or password");
+      if (signInResult?.error) {
+        router.push("/auth/login");
       } else {
         router.push("/");
         router.refresh();
@@ -55,10 +72,18 @@ export default function LoginPage() {
           </a>
         </div>
 
-        <h1 className="text-2xl font-bold font-display text-center mb-2">
-          Welcome back to <span className="gradient-text">{APP_NAME}</span>
-        </h1>
-        <p className="text-text-secondary text-sm text-center mb-8">Sign in to continue editing</p>
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium tracking-widest uppercase rounded-full border border-neon-cyan/20 bg-neon-cyan/5 text-neon-cyan mb-4">
+            <Zap size={12} />
+            Free Account
+          </div>
+          <h1 className="text-2xl font-bold font-display mb-2">
+            Create your <span className="gradient-text">{APP_NAME}</span>
+          </h1>
+          <p className="text-text-secondary text-sm">
+            5 free credits on signup. No credit card required.
+          </p>
+        </div>
 
         <div className="space-y-3 mb-6">
           <Button
@@ -97,7 +122,14 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleRegister} className="space-y-4">
+          <input
+            type="text"
+            placeholder="Full name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full glass rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-neon-cyan/30 transition-colors"
+          />
           <input
             type="email"
             placeholder="Email address"
@@ -107,7 +139,7 @@ export default function LoginPage() {
           />
           <input
             type="password"
-            placeholder="Password"
+            placeholder="Password (min 6 characters)"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full glass rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-neon-cyan/30 transition-colors"
@@ -122,17 +154,17 @@ export default function LoginPage() {
 
           <Button variant="neon" size="lg" className="w-full" type="submit" disabled={loading}>
             {loading ? (
-              <><Loader2 size={16} className="animate-spin" /> Signing in...</>
+              <><Loader2 size={16} className="animate-spin" /> Creating account...</>
             ) : (
-              "Sign In"
+              "Create Account"
             )}
           </Button>
         </form>
 
         <p className="text-center text-sm text-text-tertiary mt-6">
-          Don&apos;t have an account?{" "}
-          <a href="/auth/register" className="text-neon-cyan hover:underline font-medium">
-            Create one free
+          Already have an account?{" "}
+          <a href="/auth/login" className="text-neon-cyan hover:underline font-medium">
+            Sign in
           </a>
         </p>
       </GlassCard>

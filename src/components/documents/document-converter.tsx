@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { cn } from "@/lib/utils";
 import { useDocumentStore } from "@/lib/document-store";
+import { convertContent } from "@/lib/document-convert";
 import type { DocumentFormat } from "@/types/document";
 
 interface FormatOption {
@@ -121,7 +122,7 @@ function FormatCard({
 }
 
 export function DocumentConverter() {
-  const { currentDocument, rawContent, setRawContent, setActivePanel } = useDocumentStore();
+  const { currentDocument, rawContent, setRawContent, setActivePanel, createDocument } = useDocumentStore();
 
   const docFormat = currentDocument?.format ?? "rich";
   const [fromFormat, setFromFormat] = useState<DocumentFormat>(docFormat);
@@ -155,30 +156,14 @@ export function DocumentConverter() {
     setResult(null);
 
     try {
-      const res = await fetch("/api/documents/convert", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fromFormat,
-          toFormat,
-          content,
-          title: currentDocument?.title ?? "Untitled",
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "Conversion failed");
-      }
-
-      const data = await res.json();
-      setResult(data.content ?? "");
+      const converted = convertContent(fromFormat, toFormat, content);
+      setResult(converted);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Conversion failed");
     } finally {
       setLoading(false);
     }
-  }, [fromFormat, toFormat, rawContent, inputContent, useCurrentDoc, currentDocument]);
+  }, [fromFormat, toFormat, rawContent, inputContent, useCurrentDoc]);
 
   const handleCopy = useCallback(async () => {
     if (!result) return;
@@ -199,25 +184,17 @@ export function DocumentConverter() {
     URL.revokeObjectURL(url);
   }, [result, toFormat, currentDocument]);
 
-  const handleSaveAsNew = useCallback(async () => {
+  const handleSaveAsNew = useCallback(() => {
     if (!result) return;
-    setLoading(true);
     try {
-      await fetch("/api/documents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: `${currentDocument?.title ?? "Untitled"} (${FORMAT_OPTIONS.find((f) => f.id === toFormat)?.name})`,
-          content: result,
-          format: toFormat,
-        }),
+      createDocument({
+        title: `${currentDocument?.title ?? "Untitled"} (${FORMAT_OPTIONS.find((f) => f.id === toFormat)?.name})`,
+        format: toFormat,
       });
     } catch {
       setError("Failed to save document");
-    } finally {
-      setLoading(false);
     }
-  }, [result, toFormat, currentDocument]);
+  }, [result, toFormat, currentDocument, createDocument]);
 
   return (
     <motion.div
@@ -346,7 +323,7 @@ export function DocumentConverter() {
               disabled={!inputContent && !rawContent}
             >
               Convert {FORMAT_OPTIONS.find((f) => f.id === fromFormat)?.name}
-              {" → "}
+              {" \u2192 "}
               {FORMAT_OPTIONS.find((f) => f.id === toFormat)?.name}
             </Button>
           </div>
@@ -387,7 +364,7 @@ export function DocumentConverter() {
                       <Download className="size-4" />
                       Download
                     </Button>
-                    <Button variant="neon" size="sm" onClick={handleSaveAsNew} loading={loading}>
+                    <Button variant="neon" size="sm" onClick={handleSaveAsNew}>
                       <Save className="size-4" />
                       Save as New
                     </Button>

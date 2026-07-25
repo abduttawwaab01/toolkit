@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Grid3X3,
@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, formatBytes } from "@/lib/utils";
+import { useDocumentStore } from "@/lib/document-store";
 import type { Document, DocumentFormat, DocumentFilters } from "@/types/document";
 
 const FORMAT_CONFIG: Record<DocumentFormat, { label: string; color: string; bg: string; icon: React.ElementType }> = {
@@ -71,7 +72,6 @@ function SkeletonRow() {
 
 export function DocumentList({ onEdit }: { onEdit?: (doc: Document) => void }) {
   const [view, setView] = useState<"grid" | "list">("grid");
-  const [docs, setDocs] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<DocumentFilters>({
@@ -82,6 +82,16 @@ export function DocumentList({ onEdit }: { onEdit?: (doc: Document) => void }) {
   });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showFilters, setShowFilters] = useState(false);
+
+  const documents = useDocumentStore((s) => s.documents);
+  const deleteDocument = useDocumentStore((s) => s.deleteDocument);
+  const loadDocuments = useDocumentStore((s) => s.loadDocuments);
+
+  useEffect(() => {
+    loadDocuments();
+    const timer = setTimeout(() => setLoading(false), 300);
+    return () => clearTimeout(timer);
+  }, [loadDocuments]);
 
   const formatDate = useCallback((date: string) => {
     const d = new Date(date);
@@ -94,7 +104,49 @@ export function DocumentList({ onEdit }: { onEdit?: (doc: Document) => void }) {
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }, []);
 
-  const totalWords = useMemo(() => docs.reduce((sum, d) => sum + d.wordCount, 0), [docs]);
+  const filteredDocs = useMemo(() => {
+    let result = [...documents];
+
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter((d) => d.title.toLowerCase().includes(q));
+    }
+
+    if (filters.format) {
+      result = result.filter((d) => d.format === filters.format);
+    }
+
+    if (filters.isArchived !== undefined) {
+      result = result.filter((d) => d.isArchived === filters.isArchived);
+    }
+
+    const sortBy = filters.sortBy || "updatedAt";
+    const sortOrder = filters.sortOrder || "desc";
+    result.sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === "title") cmp = a.title.localeCompare(b.title);
+      else if (sortBy === "size") cmp = (a.size || 0) - (b.size || 0);
+      else if (sortBy === "createdAt") cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      else cmp = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+      return sortOrder === "desc" ? -cmp : cmp;
+    });
+
+    const page = filters.page || 1;
+    const limit = filters.limit || 12;
+    const start = (page - 1) * limit;
+    return result.slice(start, start + limit);
+  }, [documents, search, filters]);
+
+  const totalFiltered = useMemo(() => {
+    let result = [...documents];
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter((d) => d.title.toLowerCase().includes(q));
+    }
+    return result.length;
+  }, [documents, search]);
+
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / (filters.limit || 12)));
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -107,24 +159,45 @@ export function DocumentList({ onEdit }: { onEdit?: (doc: Document) => void }) {
 
   const toggleSelectAll = useCallback(() => {
     setSelectedIds((prev) => {
-      if (prev.size === docs.length) return new Set();
-      return new Set(docs.map((d) => d.id));
+      if (prev.size === filteredDocs.length) return new Set();
+      return new Set(filteredDocs.map((d) => d.id));
     });
-  }, [docs]);
+  }, [filteredDocs]);
 
   const handleBulkDelete = useCallback(() => {
-    setDocs((prev) => prev.filter((d) => !selectedIds.has(d.id)));
+    selectedIds.forEach((id) => deleteDocument(id));
     setSelectedIds(new Set());
-  }, [selectedIds]);
+  }, [selectedIds, deleteDocument]);
 
   const handleBulkArchive = useCallback(() => {
-    setDocs((prev) => prev.map((d) => selectedIds.has(d.id) ? { ...d, isArchived: !d.isArchived } : d));
+    selectedIds.forEach((id) => {
+      const doc = documents.find((d) => d.id === id);
+      if (doc) {
+        const updated = { ...doc, isArchived: !doc.isArchived };
+        const docs = documents.map((d) => (d.id === id ? updated : d));
+        localStorage.setItem("toolkit-documents", JSON.stringify(docs));
+        useDocumentStore.setState({ documents: docs });
+      }
+    });
     setSelectedIds(new Set());
-  }, [selectedIds]);
+  }, [selectedIds, documents]);
 
   const handleDelete = useCallback((id: string) => {
-    setDocs((prev) => prev.filter((d) => d.id !== id));
+    deleteDocument(id);
     setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
+  }, [deleteDocument]);
+
+  const handleExport = useCallback((doc: Document) => {
+    const raw = typeof doc.content === "string" ? doc.content : JSON.stringify(doc.content, null, 2);
+    const mime = doc.format === "html" ? "text/html" : doc.format === "markdown" ? "text/markdown" : "text/plain";
+    const ext = doc.format === "markdown" ? "md" : "txt";
+    const blob = new Blob([raw], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${doc.title}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
   }, []);
 
   return (
@@ -204,18 +277,6 @@ export function DocumentList({ onEdit }: { onEdit?: (doc: Document) => void }) {
                 </select>
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] text-text-tertiary uppercase tracking-wider">Template</label>
-                <select
-                  value={filters.isTemplate === undefined ? "" : String(filters.isTemplate)}
-                  onChange={(e) => setFilters((p) => ({ ...p, isTemplate: e.target.value === "" ? undefined : e.target.value === "true" }))}
-                  className="bg-glass-light border border-border-subtle rounded-lg px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:border-neon-cyan/40"
-                >
-                  <option value="">All</option>
-                  <option value="false">Documents</option>
-                  <option value="true">Templates</option>
-                </select>
-              </div>
-              <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-text-tertiary uppercase tracking-wider">Sort By</label>
                 <select
                   value={filters.sortBy ?? "updatedAt"}
@@ -277,7 +338,7 @@ export function DocumentList({ onEdit }: { onEdit?: (doc: Document) => void }) {
             </table>
           </div>
         )
-      ) : docs.length === 0 ? (
+      ) : filteredDocs.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-3">
             <div className="size-16 rounded-2xl bg-glass-light border border-border-subtle flex items-center justify-center mx-auto">
@@ -289,7 +350,7 @@ export function DocumentList({ onEdit }: { onEdit?: (doc: Document) => void }) {
         </div>
       ) : view === "grid" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 flex-1">
-          {docs.map((doc, i) => (
+          {filteredDocs.map((doc, i) => (
             <motion.div
               key={doc.id}
               initial={{ opacity: 0, y: 20 }}
@@ -332,7 +393,7 @@ export function DocumentList({ onEdit }: { onEdit?: (doc: Document) => void }) {
                   <Pencil className="size-3.5" />
                 </button>
                 <button
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); handleExport(doc); }}
                   className="p-1.5 rounded-lg hover:bg-glass-heavy text-text-tertiary hover:text-neon-purple transition-colors"
                 >
                   <Download className="size-3.5" />
@@ -357,12 +418,12 @@ export function DocumentList({ onEdit }: { onEdit?: (doc: Document) => void }) {
                     onClick={toggleSelectAll}
                     className={cn(
                       "size-4 rounded-sm border flex items-center justify-center transition-all",
-                      selectedIds.size === docs.length && docs.length > 0
+                      selectedIds.size === filteredDocs.length && filteredDocs.length > 0
                         ? "bg-neon-cyan border-neon-cyan text-black"
                         : "border-border-subtle",
                     )}
                   >
-                    {selectedIds.size === docs.length && docs.length > 0 && <Check className="size-2.5" />}
+                    {selectedIds.size === filteredDocs.length && filteredDocs.length > 0 && <Check className="size-2.5" />}
                   </button>
                 </th>
                 <th className="py-3 px-4 text-[11px] text-text-tertiary uppercase tracking-wider font-medium">Title</th>
@@ -374,7 +435,7 @@ export function DocumentList({ onEdit }: { onEdit?: (doc: Document) => void }) {
               </tr>
             </thead>
             <tbody>
-              {docs.map((doc, i) => (
+              {filteredDocs.map((doc, i) => (
                 <motion.tr
                   key={doc.id}
                   initial={{ opacity: 0 }}
@@ -400,7 +461,7 @@ export function DocumentList({ onEdit }: { onEdit?: (doc: Document) => void }) {
                   <td className="py-3 px-4 text-sm text-text-primary font-medium truncate max-w-[200px]">{doc.title}</td>
                   <td className="py-3 px-4"><FormatBadge format={doc.format} /></td>
                   <td className="py-3 px-4 text-sm text-text-secondary">{doc.wordCount.toLocaleString()}</td>
-                  <td className="py-3 px-4 text-sm text-text-secondary">{formatBytes(doc.size)}</td>
+                  <td className="py-3 px-4 text-sm text-text-secondary">{formatBytes(doc.size ?? 0)}</td>
                   <td className="py-3 px-4 text-sm text-text-tertiary">{formatDate(doc.updatedAt)}</td>
                   <td className="py-3 px-4">
                     <div className="flex gap-1">
@@ -411,7 +472,7 @@ export function DocumentList({ onEdit }: { onEdit?: (doc: Document) => void }) {
                         <Pencil className="size-3.5" />
                       </button>
                       <button
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => { e.stopPropagation(); handleExport(doc); }}
                         className="p-1.5 rounded-lg hover:bg-glass-heavy text-text-tertiary hover:text-neon-purple transition-colors"
                       >
                         <Download className="size-3.5" />
@@ -431,11 +492,11 @@ export function DocumentList({ onEdit }: { onEdit?: (doc: Document) => void }) {
         </div>
       )}
 
-      {!loading && docs.length > 0 && (
+      {!loading && filteredDocs.length > 0 && (
         <div className="flex items-center justify-between mt-4 text-sm text-text-secondary">
           <span>
-            Showing {(filters.page ?? 1) * (filters.limit ?? 12) - (filters.limit ?? 12) + 1}
-            –{Math.min((filters.page ?? 1) * (filters.limit ?? 12), totalWords)} of {totalWords} documents
+            Showing {((filters.page ?? 1) - 1) * (filters.limit ?? 12) + 1}
+            \u2013{Math.min((filters.page ?? 1) * (filters.limit ?? 12), totalFiltered)} of {totalFiltered} documents
           </span>
           <div className="flex items-center gap-1">
             <button
@@ -446,11 +507,12 @@ export function DocumentList({ onEdit }: { onEdit?: (doc: Document) => void }) {
               <ChevronLeft className="size-4" />
             </button>
             <span className="px-3 py-1 text-xs text-text-tertiary">
-              Page {filters.page ?? 1}
+              Page {filters.page ?? 1} of {totalPages}
             </span>
             <button
-              onClick={() => setFilters((p) => ({ ...p, page: (p.page ?? 1) + 1 }))}
-              className="p-1.5 rounded-lg border border-border-subtle text-text-tertiary hover:text-text-primary hover:bg-glass-medium transition-colors"
+              onClick={() => setFilters((p) => ({ ...p, page: Math.min(totalPages, (p.page ?? 1) + 1) }))}
+              disabled={(filters.page ?? 1) >= totalPages}
+              className="p-1.5 rounded-lg border border-border-subtle text-text-tertiary hover:text-text-primary hover:bg-glass-medium disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronRight className="size-4" />
             </button>
