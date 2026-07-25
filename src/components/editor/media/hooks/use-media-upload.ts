@@ -3,17 +3,12 @@
 import { useState, useCallback, useRef } from "react";
 import type { UploadProgress } from "@/types/media";
 
-/**
- * Handles file upload to the ToolKit API.
- * Manages progress tracking, multiple concurrent uploads,
- * and error handling.
- */
 export function useMediaUpload() {
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
   const activeRef = useRef<Map<string, AbortController>>(new Map());
 
   const uploadFile = useCallback(
-    async (file: File, userId?: string): Promise<UploadProgress> => {
+    async (file: File, userId?: string, isGuest?: boolean): Promise<UploadProgress> => {
       const fileId = crypto.randomUUID();
       const entry: UploadProgress = {
         fileId,
@@ -22,6 +17,35 @@ export function useMediaUpload() {
         status: "uploading",
       };
       setUploads((prev) => [...prev, entry]);
+
+      if (isGuest) {
+        return new Promise<UploadProgress>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = reader.result as string;
+            const blobUrl = URL.createObjectURL(file);
+            const complete: UploadProgress = {
+              ...entry,
+              progress: 100,
+              status: "complete",
+              localUrl: dataUrl,
+              blobUrl,
+              file,
+            };
+            setUploads((prev) => prev.map((u) => (u.fileId === fileId ? complete : u)));
+            setTimeout(() => {
+              setUploads((prev) => prev.filter((u) => u.fileId !== fileId));
+            }, 4000);
+            resolve(complete);
+          };
+          reader.onerror = () => {
+            const err: UploadProgress = { ...entry, status: "error", error: "Failed to read file" };
+            setUploads((prev) => prev.map((u) => (u.fileId === fileId ? err : u)));
+            resolve(err);
+          };
+          reader.readAsDataURL(file);
+        });
+      }
 
       const controller = new AbortController();
       activeRef.current.set(fileId, controller);
@@ -72,7 +96,6 @@ export function useMediaUpload() {
           ),
         );
 
-        // Remove from active after short delay
         setTimeout(() => {
           setUploads((prev) => prev.filter((u) => u.fileId !== fileId));
           activeRef.current.delete(fileId);

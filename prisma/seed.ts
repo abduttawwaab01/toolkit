@@ -55,8 +55,15 @@ async function main() {
     }
   }
 
+  // Seed guest AI toggle (default: disabled)
+  await prisma.platformSetting.upsert({
+    where: { key: "guest_ai_disabled" },
+    update: {},
+    create: { key: "guest_ai_disabled", value: "true", label: "Disable AI for Guests", category: "guest", type: "boolean" },
+  });
+
   const features = [
-    { key: "ai-video-editing", label: "AI Video Editing", enabled: true, roles: '["ADMIN","USER","GUEST"]' },
+    { key: "ai-video-editing", label: "AI Video Editing", enabled: true, roles: '["ADMIN","USER"]' },
     { key: "ai-audio-studio", label: "AI Audio Studio", enabled: true, roles: '["ADMIN","USER"]' },
     { key: "voice-cloning", label: "Voice Cloning", enabled: true, roles: '["ADMIN","USER"]' },
     { key: "guest-uploads", label: "Guest Uploads", enabled: true, roles: '["ADMIN"]' },

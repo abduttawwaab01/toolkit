@@ -6,7 +6,7 @@ import {
   Undo2, Redo2, Scissors, Play, Square,
   Music, Type, Image, Wand2, Download, Sparkles,
   Magnet, Plus, Trash2, GripVertical, Keyboard, Settings,
-  PanelLeft, PanelRight, ChevronDown, ChevronUp,
+  PanelLeft, PanelRight, ChevronDown, ChevronUp, ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEditorStore } from "@/lib/editor-store";
@@ -59,6 +59,7 @@ export default function EditorPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [mobileSheet, setMobileSheet] = useState<{ open: boolean; panel: string }>({ open: false, panel: "" });
   const [showMobileTimeline, setShowMobileTimeline] = useState(false);
+  const [isGuest] = useState(() => typeof window !== "undefined" && !!localStorage.getItem("tk_guest_token"));
 
   const { open: shortcutsOpen, setOpen: setShortcutsOpen } = useKeyboardShortcuts();
   const { status: saveStatus } = useAutoSave(30000);
@@ -98,6 +99,7 @@ export default function EditorPage() {
             <Suspense fallback={<MediaGridSkeleton />}>
               <MediaGrid
                 userId="demo-user"
+                isGuest={isGuest}
                 onEditImage={(url) => useImageEditorStore.getState().openEditor(url)}
                 onAddToTimeline={(item) => {
                   const store = useEditorStore.getState();
@@ -174,6 +176,9 @@ export default function EditorPage() {
         {/* ─── Top Toolbar ─── */}
         <header className="glass border-b border-border-subtle px-3 h-12 flex items-center justify-between shrink-0 gap-2 z-30">
           <div className="flex items-center gap-2">
+            <a href="/" className="size-7 rounded-lg glass flex items-center justify-center text-text-tertiary hover:text-text-primary transition-colors" title="Back to Home">
+              <ArrowLeft size={14} />
+            </a>
             <span className="font-display font-bold gradient-text text-sm mr-2">ToolKit</span>
             <span className="text-xs text-text-tertiary px-2 py-0.5 glass rounded-md max-w-[120px] truncate hidden sm:block">
               {project.name}

@@ -197,6 +197,9 @@ export default function DocumentsPage() {
             {/* Dashboard Header */}
             <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
               <div className="flex items-center gap-3">
+                <a href="/" className="size-10 rounded-xl bg-glass-medium border border-border-subtle flex items-center justify-center text-text-tertiary hover:text-text-primary hover:bg-glass-heavy transition-colors">
+                  <ArrowLeft className="size-4" />
+                </a>
                 <div className="size-10 rounded-xl bg-gradient-to-br from-neon-cyan/20 to-neon-purple/20 border border-neon-cyan/20 flex items-center justify-center">
                   <FileText className="size-5 text-neon-cyan" />
                 </div>

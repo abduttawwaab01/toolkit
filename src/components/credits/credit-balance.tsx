@@ -34,13 +34,20 @@ function AnimatedNumber({ value }: { value: number }) {
 export function CreditBalance({ compact = true }: CreditBalanceProps) {
   const [balance, setBalance] = useState<number | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
 
   const fetchBalance = useCallback(async () => {
     try {
       const res = await fetch("/api/credits/balance");
+      if (res.status === 401) {
+        setAuthenticated(false);
+        setBalance(0);
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         setBalance(data.balance ?? data.creditsBalance ?? 0);
+        setAuthenticated(true);
       }
     } catch {
       setBalance(0);
@@ -59,7 +66,9 @@ export function CreditBalance({ compact = true }: CreditBalanceProps) {
           className="relative inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-neon-cyan/10 border border-neon-cyan/25 text-neon-cyan hover:bg-neon-cyan/15 transition-all duration-200 shadow-[0_0_12px_rgba(0,245,212,0.08)] cursor-pointer"
         >
           <Zap size={14} className="shrink-0" />
-          {balance !== null ? (
+          {authenticated === false ? (
+            <span className="text-xs">0</span>
+          ) : balance !== null ? (
             <AnimatedNumber value={balance} />
           ) : (
             <span className="size-3 rounded-full bg-neon-cyan/30 animate-pulse" />

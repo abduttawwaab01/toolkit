@@ -6,6 +6,7 @@ import {
   Zap,
   ArrowUpRight,
   ArrowDownRight,
+  ArrowLeft,
   Clock,
   Banknote,
   Sparkles,
@@ -15,7 +16,6 @@ import {
   CheckCircle2,
   ArrowRight,
   CreditCard,
-  TrendingUp,
   Package,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -49,14 +49,6 @@ interface PurchaseRequest {
   package?: { name: string } | null;
 }
 
-interface FeatureCost {
-  featureKey: string;
-  featureLabel: string;
-  creditsCost: number;
-  isEnabled: boolean;
-  description?: string | null;
-}
-
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof CheckCircle2 }> = {
   PENDING: { label: "Pending", color: "bg-yellow-500/15 text-yellow-400 border-yellow-500/25", icon: Clock },
   APPROVED: { label: "Approved", color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25", icon: CheckCircle2 },
@@ -85,7 +77,6 @@ export default function CreditsPage() {
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [bankDetail, setBankDetail] = useState<BankDetail | null>(null);
   const [requests, setRequests] = useState<PurchaseRequest[]>([]);
-  const [featureCosts, setFeatureCosts] = useState<FeatureCost[]>([]);
   const [selectedPkg, setSelectedPkg] = useState<string | null>(null);
   const [accountName, setAccountName] = useState("");
   const [bankFrom, setBankFrom] = useState("");
@@ -98,23 +89,23 @@ export default function CreditsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [balRes, pkgRes, bankRes, reqRes, costRes] = await Promise.all([
+      const [balRes, pkgRes, bankRes, reqRes] = await Promise.all([
         fetch("/api/credits/balance"),
         fetch("/api/credits/packages"),
         fetch("/api/credits/bank-details"),
         fetch("/api/credits/request"),
-        fetch("/api/credits/feature-costs"),
       ]);
       if (balRes.ok) {
         const d = await balRes.json();
         setBalance(d.balance ?? d.creditsBalance ?? 0);
+      } else {
+        setBalance(0);
       }
       if (pkgRes.ok) setPackages(await pkgRes.json());
       if (bankRes.ok) setBankDetail(await bankRes.json());
       if (reqRes.ok) setRequests(await reqRes.json());
-      if (costRes.ok) setFeatureCosts(await costRes.json());
     } catch {
-      /* silently fail */
+      setBalance(0);
     } finally {
       setLoading(false);
     }
@@ -183,6 +174,14 @@ export default function CreditsPage() {
 
       <div className="relative max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-8">
+
+          {/* Back Button */}
+          <motion.div variants={itemVariants}>
+            <a href="/" className="inline-flex items-center gap-1.5 text-xs text-text-tertiary hover:text-text-secondary transition-colors">
+              <ArrowLeft className="size-3.5" />
+              Back to Home
+            </a>
+          </motion.div>
 
           {/* Hero */}
           <motion.div variants={itemVariants} className="text-center mb-2">
@@ -444,39 +443,6 @@ export default function CreditsPage() {
                     Request submitted successfully! We&apos;ll verify your payment shortly.
                   </motion.p>
                 )}
-              </GlassCard>
-            </motion.div>
-          )}
-
-          {/* Feature Costs */}
-          {featureCosts.filter((f) => f.isEnabled).length > 0 && (
-            <motion.div variants={itemVariants}>
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp size={16} className="text-neon-cyan" />
-                <h2 className="text-lg font-semibold font-display text-text-primary">Feature Costs</h2>
-              </div>
-              <GlassCard>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {featureCosts
-                    .filter((f) => f.isEnabled)
-                    .map((f) => (
-                      <div
-                        key={f.featureKey}
-                        className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]"
-                      >
-                        <div>
-                          <p className="text-sm font-medium text-text-primary">{f.featureLabel}</p>
-                          {f.description && (
-                            <p className="text-[11px] text-text-tertiary mt-0.5">{f.description}</p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0 ml-3">
-                          <Zap size={12} className="text-neon-cyan" />
-                          <span className="text-sm font-semibold text-neon-cyan">{f.creditsCost}</span>
-                        </div>
-                      </div>
-                    ))}
-                </div>
               </GlassCard>
             </motion.div>
           )}

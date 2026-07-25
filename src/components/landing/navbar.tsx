@@ -58,8 +58,12 @@ export function Navbar() {
         <div className="hidden md:flex items-center gap-3">
           <CreditBalance compact />
           <ThemeToggle />
-          <Button variant="ghost" size="sm">Sign In</Button>
-          <Button variant="neon" size="sm">Try Free</Button>
+          <a href="/auth/login">
+            <Button variant="ghost" size="sm">Sign In</Button>
+          </a>
+          <a href="/auth/login">
+            <Button variant="neon" size="sm">Try Free</Button>
+          </a>
         </div>
 
         <button
@@ -89,8 +93,12 @@ export function Navbar() {
               <div className="flex gap-3 pt-2">
                 <CreditBalance compact />
                 <ThemeToggle />
-                <Button variant="ghost" size="sm" className="flex-1">Sign In</Button>
-                <Button variant="neon" size="sm" className="flex-1">Try Free</Button>
+                <a href="/auth/login" className="flex-1">
+                  <Button variant="ghost" size="sm" className="w-full">Sign In</Button>
+                </a>
+                <a href="/auth/login" className="flex-1">
+                  <Button variant="neon" size="sm" className="w-full">Try Free</Button>
+                </a>
               </div>
             </div>
           </motion.div>

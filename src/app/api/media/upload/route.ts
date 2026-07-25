@@ -13,16 +13,9 @@ export async function POST(req: NextRequest) {
   const role = req.headers.get("x-user-role") || "GUEST";
   const isGuest = !userId || role === "GUEST";
 
-  // Check if guest uploads are allowed
+  // Guest uploads are handled client-side only — reject server-side uploads
   if (isGuest) {
-    try {
-      const allowGuest = await db.platformSetting.findUnique({ where: { key: "allowGuestUploads" } });
-      if (allowGuest?.value === "false") {
-        return jsonResponse({ error: "Guest uploads are disabled" }, { status: 403 });
-      }
-    } catch {
-      return jsonResponse({ error: "Guest uploads are disabled" }, { status: 403 });
-    }
+    return jsonResponse({ error: "Guest uploads are handled in the browser. Please sign up for persistent storage." }, { status: 403 });
   }
 
   try {
@@ -38,17 +31,9 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const key = `${isGuest ? "guest" : userId}/${crypto.randomUUID()}-${file.name}`;
+    const key = `${userId}/${crypto.randomUUID()}-${file.name}`;
 
-    // Determine user (create ephemeral guest record if needed)
-    let effectiveUserId = userId;
-    if (isGuest) {
-      let guest = await db.user.findFirst({ where: { role: "GUEST", isSuspended: false, adminNotes: `ip:${ip}` } });
-      if (!guest) {
-        guest = await db.user.create({ data: { role: "GUEST", creditsBalance: 3, storageLimit: BigInt(104857600), adminNotes: `ip:${ip}` } });
-      }
-      effectiveUserId = guest.id;
-    }
+    const effectiveUserId = userId;
 
     if (!effectiveUserId) return jsonResponse({ error: "Could not identify user" }, { status: 400 });
 

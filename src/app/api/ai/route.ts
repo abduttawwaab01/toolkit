@@ -1,9 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { aiRouter } from "@/lib/ai-router";
 import { db } from "@/lib/db";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth.config";
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    const userRole = (session?.user as any)?.role as string | undefined;
+
+    // Also check x-user-role header for guest JWT flow
+    const headerRole = req.headers.get("x-user-role");
+    const effectiveRole = userRole || headerRole || "";
+
+    // Check admin guest_ai_disabled setting
+    if (effectiveRole === "GUEST") {
+      const setting = await db.platformSetting.findUnique({ where: { key: "guest_ai_disabled" } });
+      if (setting?.value !== "false") {
+        return NextResponse.json({ error: "AI features are not available in guest mode" }, { status: 403 });
+      }
+    }
+
     const body = await req.json();
     const { feature, userId } = body;
 

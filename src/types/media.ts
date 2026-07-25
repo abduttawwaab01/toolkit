@@ -19,6 +19,9 @@ export interface UploadProgress {
   progress: number; // 0-100
   status: "uploading" | "processing" | "complete" | "error";
   error?: string;
+  localUrl?: string;
+  blobUrl?: string;
+  file?: File;
 }
 
 export interface MediaFolder {

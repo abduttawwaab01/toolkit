@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Search, Filter, Grid, List, Loader2, AlertCircle, FolderOpen } from "lucide-react";
 import { MediaItem } from "./media-item";
 import { MediaUpload } from "./media-upload";
@@ -8,50 +8,102 @@ import { useMediaLibrary } from "./hooks/use-media-library";
 import { useMediaUpload } from "./hooks/use-media-upload";
 import type { MediaItem as MediaItemType } from "@/types/media";
 
+function detectType(mime: string): "video" | "audio" | "image" {
+  if (mime.startsWith("video")) return "video";
+  if (mime.startsWith("audio")) return "audio";
+  return "image";
+}
+
+interface LocalFile {
+  id: string;
+  file: File;
+  url: string;
+  blobUrl: string;
+  name: string;
+  type: "video" | "audio" | "image";
+  mimeType: string;
+  size: number;
+  createdAt: string;
+}
+
 interface MediaGridProps {
   userId?: string;
+  isGuest?: boolean;
   onAddToTimeline?: (item: MediaItemType) => void;
   onEditImage?: (url: string) => void;
 }
 
-/**
- * Media Library — the main asset browser.
- * Supports:
- * - Grid / list toggle
- * - Search & type filter
- * - Drag-and-drop upload with progress
- * - Delete items
- * - Drag items to timeline
- */
-export function MediaGrid({ userId, onAddToTimeline, onEditImage }: MediaGridProps) {
+export function MediaGrid({ userId, isGuest, onAddToTimeline, onEditImage }: MediaGridProps) {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const { items, loading, error, search, setSearch, refresh, deleteItem } = useMediaLibrary({
-    userId,
+    userId: isGuest ? undefined : userId,
     type: typeFilter === "all" ? undefined : (typeFilter as any),
   });
   const { uploads, uploadFile, cancelUpload } = useMediaUpload();
   const [selectedItem, setSelectedItem] = useState<MediaItemType | null>(null);
+  const [localFiles, setLocalFiles] = useState<LocalFile[]>([]);
 
   const handleUpload = useCallback(
     async (files: File[]) => {
       for (const file of files) {
-        await uploadFile(file, userId);
+        const result = await uploadFile(file, userId, isGuest);
+        if (result.status === "complete" && isGuest && result.localUrl) {
+          const local: LocalFile = {
+            id: result.fileId,
+            file: result.file!,
+            url: result.localUrl,
+            blobUrl: result.blobUrl || result.localUrl,
+            name: result.fileName,
+            type: detectType(result.file?.type || ""),
+            mimeType: result.file?.type || "",
+            size: result.file?.size || 0,
+            createdAt: new Date().toISOString(),
+          };
+          setLocalFiles((prev) => [...prev, local]);
+        }
       }
-      refresh();
+      if (!isGuest) refresh();
     },
-    [userId, uploadFile, refresh],
+    [userId, isGuest, uploadFile, refresh],
   );
 
   const handleDelete = useCallback(
     async (id: string) => {
+      if (isGuest) {
+        setLocalFiles((prev) => {
+          const file = prev.find((f) => f.id === id);
+          if (file) URL.revokeObjectURL(file.blobUrl);
+          return prev.filter((f) => f.id !== id);
+        });
+        if (selectedItem?.id === id) setSelectedItem(null);
+        return;
+      }
       await deleteItem(id);
       if (selectedItem?.id === id) setSelectedItem(null);
     },
-    [deleteItem, selectedItem],
+    [isGuest, deleteItem, selectedItem],
   );
 
-  const filteredItems = items;
+  const filteredItems = isGuest
+    ? localFiles
+        .filter((f) => typeFilter === "all" || f.type === typeFilter)
+        .filter((f) => !search || f.name.toLowerCase().includes(search.toLowerCase()))
+        .map((f): MediaItemType => ({
+          id: f.id,
+          name: f.name,
+          type: f.type,
+          mimeType: f.mimeType,
+          size: f.size,
+          duration: null,
+          width: null,
+          height: null,
+          url: f.blobUrl,
+          thumbnailUrl: f.type === "image" ? f.blobUrl : null,
+          createdAt: f.createdAt,
+          autoDeleteAt: null,
+        }))
+    : items;
 
   return (
     <div className="flex flex-col h-full">
@@ -108,13 +160,13 @@ export function MediaGrid({ userId, onAddToTimeline, onEditImage }: MediaGridPro
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-3 pb-3">
-        {loading && (
+        {!isGuest && loading && (
           <div className="flex items-center justify-center py-12">
             <Loader2 size={20} className="text-neon-cyan animate-spin" />
           </div>
         )}
 
-        {error && (
+        {!isGuest && error && (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <AlertCircle size={24} className="text-neon-pink mb-2" />
             <p className="text-xs text-text-secondary">{error}</p>
@@ -124,7 +176,7 @@ export function MediaGrid({ userId, onAddToTimeline, onEditImage }: MediaGridPro
           </div>
         )}
 
-        {!loading && !error && filteredItems.length === 0 && (
+        {filteredItems.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <FolderOpen size={28} className="text-text-tertiary mb-2" />
             <p className="text-xs text-text-tertiary">No media yet</p>
@@ -132,7 +184,7 @@ export function MediaGrid({ userId, onAddToTimeline, onEditImage }: MediaGridPro
           </div>
         )}
 
-        {!loading && !error && filteredItems.length > 0 && (
+        {filteredItems.length > 0 && (
           <div
             className={
               viewMode === "grid"

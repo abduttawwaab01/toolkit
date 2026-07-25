@@ -3,11 +3,19 @@
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { APP_NAME } from "@/lib/constants";
+import { ArrowLeft } from "lucide-react";
 
 export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <GlassCard className="w-full max-w-md p-8">
+        <div className="mb-6">
+          <a href="/" className="inline-flex items-center gap-1.5 text-xs text-text-tertiary hover:text-text-secondary transition-colors">
+            <ArrowLeft className="size-3.5" />
+            Back to Home
+          </a>
+        </div>
+
         <h1 className="text-2xl font-bold font-display text-center mb-2">
           Welcome back to <span className="gradient-text">{APP_NAME}</span>
         </h1>
@@ -36,7 +44,7 @@ export default function LoginPage() {
         </form>
 
         <p className="text-center text-sm text-text-tertiary mt-6">
-          No account? <a href="/auth/register" className="text-neon-cyan hover:underline">Sign up</a>
+          No account? <span className="text-neon-cyan">Sign up coming soon</span>
         </p>
       </GlassCard>
     </div>
