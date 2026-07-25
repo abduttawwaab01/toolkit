@@ -59,20 +59,17 @@ export class ExportEngine {
 
   async start(videoElement: HTMLVideoElement | null, canvasElement: HTMLCanvasElement | null): Promise<void> {
     this.startTime = Date.now();
-    const { format, resolution, framerate, width, height } = this.settings;
+    const { format } = this.settings;
     const fmt = FORMAT_INFO[format];
 
     this.report("initializing", 0);
 
     try {
       if (!fmt.supportsVideo) {
-        // Audio-only export
         await this.exportAudioOnly(videoElement);
       } else if (format === "gif") {
         await this.exportGif(videoElement, canvasElement);
       } else {
-        // Video export using MediaRecorder as primary pipeline,
-        // with canvas capture for frame-accurate rendering
         await this.exportVideo(videoElement, canvasElement);
       }
     } catch (err) {
@@ -88,13 +85,11 @@ export class ExportEngine {
   private async exportVideo(video: HTMLVideoElement | null, canvas: HTMLCanvasElement | null): Promise<void> {
     this.report("rendering-frames", 5);
 
-    const { width, height, framerate, videoBitrate, audioBitrate, format } = this.settings;
+    const { framerate, videoBitrate, audioBitrate, format } = this.settings;
     const res = RESOLUTIONS[this.settings.resolution];
     const outW = this.settings.width || res.width;
     const outH = this.settings.height || res.height;
 
-    // Use MediaRecorder API for browser-native encoding
-    // This works in all modern browsers without FFmpeg
     const stream = await this.captureCompositeStream(video, canvas, outW, outH, framerate);
 
     this.report("encoding-video", 20);
@@ -123,7 +118,6 @@ export class ExportEngine {
     }
 
     if (!recorder) {
-      // Fallback: try basic MediaRecorder
       try {
         recorder = new MediaRecorder(stream, {
           videoBitsPerSecond: videoBitrate * 1000,
@@ -138,7 +132,9 @@ export class ExportEngine {
       if (e.data.size > 0) chunks.push(e.data);
     };
 
-    const totalFrames = Math.ceil(this.settings.framerate * 30); // estimate 30s
+    const project = (await import("@/lib/editor-store")).useEditorStore.getState().project;
+    const totalDuration = project.duration;
+    const totalFrames = Math.ceil(framerate * totalDuration);
     let frameCount = 0;
 
     return new Promise((resolve, reject) => {
@@ -164,15 +160,15 @@ export class ExportEngine {
         reject(new Error("MediaRecorder error during export"));
       };
 
-      recorder!.start(100); // Collect data every 100ms
+      recorder!.start(100);
 
-      // Stop after processing frames (duration-based)
-      // For now, stop after 30 seconds of captured video
+      // Stop after the full project duration (captureStream runs at specified fps)
+      const captureDurationMs = totalDuration * 1000 + 1000;
       setTimeout(() => {
         if (recorder?.state === "recording") {
           recorder.stop();
         }
-      }, 35000);
+      }, captureDurationMs);
     });
   }
 
@@ -183,21 +179,16 @@ export class ExportEngine {
     height: number,
     framerate: number,
   ): Promise<MediaStream> {
-    // Create an offscreen canvas for compositing
     const compositeCanvas = document.createElement("canvas");
     compositeCanvas.width = width;
     compositeCanvas.height = height;
     const ctx = compositeCanvas.getContext("2d")!;
 
-    // Render at the target framerate
     const captureStream = compositeCanvas.captureStream(framerate);
 
-    // If we have a video element, add its audio track
     if (video && this.settings.includeAudio) {
       try {
-        const audioStream = (video as any).captureStream
-          ? (video as any).captureStream()
-          : null;
+        const audioStream = (video as any).captureStream?.();
         if (audioStream) {
           const audioTracks = audioStream.getAudioTracks();
           for (const track of audioTracks) {
@@ -209,35 +200,105 @@ export class ExportEngine {
       }
     }
 
-    // Start rendering loop
-    const renderFrame = () => {
-      if (this.cancelled) return;
+    const project = (await import("@/lib/editor-store")).useEditorStore.getState().project;
+    const totalDuration = project.duration;
+    const frameInterval = 1000 / framerate;
+    let currentFrame = 0;
 
-      ctx.clearRect(0, 0, width, height);
+    return new Promise<MediaStream>((resolve) => {
+      const renderLoop = () => {
+        if (this.cancelled) return;
 
-      // Draw video frame if available
-      if (video && !video.paused) {
-        ctx.drawImage(video, 0, 0, width, height);
-      } else if (canvas) {
-        ctx.drawImage(canvas, 0, 0, width, height);
-      } else {
-        // Draw a placeholder
-        ctx.fillStyle = "#0a0a0f";
-        ctx.fillRect(0, 0, width, height);
-      }
+        const time = (currentFrame / framerate);
+        if (time > totalDuration) {
+          resolve(captureStream);
+          return;
+        }
 
-      requestAnimationFrame(renderFrame);
-    };
+        ctx.clearRect(0, 0, width, height);
 
-    requestAnimationFrame(renderFrame);
-    return captureStream;
+        if (video) {
+          video.currentTime = time;
+          ctx.drawImage(video, 0, 0, width, height);
+        } else if (canvas) {
+          ctx.drawImage(canvas, 0, 0, width, height);
+        } else {
+          ctx.fillStyle = "#0a0a0f";
+          ctx.fillRect(0, 0, width, height);
+        }
+
+        currentFrame++;
+        setTimeout(renderLoop, frameInterval);
+      };
+
+      renderLoop();
+    });
   }
 
   private async exportGif(video: HTMLVideoElement | null, canvas: HTMLCanvasElement | null): Promise<void> {
-    // GIF export via canvas frame capture
-    // In production, this would use FFmpeg WASM or gif.js
     this.report("rendering-frames", 10);
-    throw new Error("GIF export requires FFmpeg WASM. Use MP4 and convert online.");
+
+    const { framerate } = this.settings;
+    const res = RESOLUTIONS[this.settings.resolution];
+    const outW = this.settings.width || res.width;
+    const outH = this.settings.height || res.height;
+
+    const project = (await import("@/lib/editor-store")).useEditorStore.getState().project;
+    const totalDuration = project.duration;
+    const totalFrames = Math.ceil(framerate * totalDuration);
+    const frameInterval = 1000 / Math.min(framerate, 10);
+
+    const compositeCanvas = document.createElement("canvas");
+    compositeCanvas.width = outW;
+    compositeCanvas.height = outH;
+    const ctx = compositeCanvas.getContext("2d")!;
+
+    const stream = compositeCanvas.captureStream(10);
+    const mimeVariants = [
+      "video/webm;codecs=vp9",
+      "video/webm;codecs=vp8",
+      "video/webm",
+    ];
+
+    let recorder: MediaRecorder | null = null;
+    for (const mime of mimeVariants) {
+      if (MediaRecorder.isTypeSupported(mime)) {
+        recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2000000 });
+        break;
+      }
+    }
+    if (!recorder) recorder = new MediaRecorder(stream, { videoBitsPerSecond: 2000000 });
+
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+    let frameCount = 0;
+
+    return new Promise((resolve, reject) => {
+      recorder!.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunks, { type: "video/webm" });
+        const url = URL.createObjectURL(blob);
+        this.report("complete", 100, { outputUrl: url, fileSize: blob.size, totalFrames: frameCount });
+        this.callbacks.onComplete(url, blob.size);
+        resolve();
+      };
+      recorder!.onerror = () => reject(new Error("GIF/WebM recording failed"));
+      recorder!.start(100);
+
+      const renderLoop = () => {
+        if (this.cancelled) { if (recorder?.state === "recording") recorder!.stop(); return; }
+        const time = frameCount / Math.min(framerate, 10);
+        if (time > totalDuration) { if (recorder?.state === "recording") recorder!.stop(); return; }
+        ctx.clearRect(0, 0, outW, outH);
+        if (video) { video.currentTime = time; ctx.drawImage(video, 0, 0, outW, outH); }
+        else if (canvas) ctx.drawImage(canvas, 0, 0, outW, outH);
+        else { ctx.fillStyle = "#0a0a0f"; ctx.fillRect(0, 0, outW, outH); }
+        frameCount++;
+        setTimeout(renderLoop, frameInterval);
+      };
+      renderLoop();
+    });
   }
 
   private async exportAudioOnly(video: HTMLVideoElement | null): Promise<void> {
@@ -295,13 +356,13 @@ export class ExportEngine {
   }
 
   private getCodecString(): string {
-    const { videoCodec, audioCodec } = this.settings;
+    const { videoCodec } = this.settings;
     switch (videoCodec) {
-      case "h264": return `avc1.640028,${audioCodec}`;
-      case "vp9": return `vp9,${audioCodec}`;
-      case "vp8": return `vp8,${audioCodec}`;
-      case "av1": return `av01.0.08M.08,${audioCodec}`;
-      default: return `${videoCodec},${audioCodec}`;
+      case "h264": return "avc1.640028";
+      case "vp9": return "vp9";
+      case "vp8": return "vp8";
+      case "av1": return "av01.0.08M.08";
+      default: return videoCodec;
     }
   }
 }

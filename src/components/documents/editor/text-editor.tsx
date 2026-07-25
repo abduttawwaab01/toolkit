@@ -36,13 +36,19 @@ export function TextEditor({
   const [cursorCol, setCursorCol] = useState(1);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const isFirstRender = useRef(true);
   useEffect(() => {
     setRawContent(text);
     const words = text.split(/\s+/).filter((w) => w.length > 0).length;
     setWordCount(words);
     setCharCount(text.length);
-    setIsDirty(text !== initialContent);
-    onUpdate?.(text);
+    if (!isFirstRender.current) {
+      setIsDirty(true);
+      onUpdate?.(text);
+    } else {
+      setIsDirty(false);
+      isFirstRender.current = false;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
 
@@ -168,7 +174,7 @@ export function TextEditor({
             transition={{ duration: 0.15 }}
             className="overflow-hidden"
           >
-            <div className="flex items-center gap-2 px-4 py-2 bg-white/[0.03] border-b border-white/[0.06]">
+            <div className="flex flex-wrap items-center gap-1.5 px-3 py-2 bg-white/[0.03] border-b border-white/[0.06]">
               <Search className="size-4 text-text-tertiary flex-shrink-0" />
               <input
                 autoFocus
@@ -176,13 +182,13 @@ export function TextEditor({
                 onChange={(e) => setFindQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && highlightFind()}
                 placeholder="Find..."
-                className="flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-tertiary"
+                className="min-w-[80px] flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-tertiary"
               />
               <input
                 value={replaceValue}
                 onChange={(e) => setReplaceValue(e.target.value)}
                 placeholder="Replace..."
-                className="flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-tertiary"
+                className="min-w-[80px] flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-tertiary"
               />
               <button
                 onClick={replaceNext}

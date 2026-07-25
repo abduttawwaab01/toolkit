@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { motion } from "framer-motion";
 import { Check, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,8 +7,6 @@ import { SectionBadge } from "@/components/ui/section-badge";
 import { PRICING_PLANS } from "@/lib/constants";
 
 export function Pricing() {
-  const [annual, setAnnual] = useState(false);
-
   return (
     <section id="pricing" className="relative py-24 md:py-32">
       <div className="absolute inset-0 pointer-events-none grid-bg opacity-20" />
@@ -21,20 +18,12 @@ export function Pricing() {
           className="text-center mb-12">
           <SectionBadge label="Pricing" />
           <h2 className="mt-6 text-4xl md:text-5xl lg:text-6xl font-bold font-display tracking-tight">
-            Simple. Transparent.<br />
-            <span className="text-text-secondary">Fair for everyone.</span>
+            Start free.<br />
+            <span className="text-text-secondary">Scale when you&apos;re ready.</span>
           </h2>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
-          className="flex items-center justify-center gap-3 mb-12">
-          <span className={`text-sm ${!annual ? "text-text-primary" : "text-text-tertiary"}`}>Monthly</span>
-          <button onClick={() => setAnnual(!annual)} className="relative w-12 h-6 rounded-full glass cursor-pointer">
-            <motion.div animate={{ x: annual ? 24 : 2 }} className="absolute top-1 size-4 rounded-full bg-neon-cyan" />
-          </button>
-          <span className={`text-sm ${annual ? "text-text-primary" : "text-text-tertiary"}`}>
-            Annual <span className="text-neon-cyan">Save 20%</span>
-          </span>
+          <p className="mt-4 text-text-tertiary max-w-xl mx-auto">
+            Every account starts free with credits included. Buy more credits anytime — no subscriptions, no hidden fees.
+          </p>
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
@@ -56,10 +45,9 @@ export function Pricing() {
                   <h3 className="text-lg font-semibold mb-1">{plan.name}</h3>
                   <p className="text-sm text-text-tertiary mb-4">{plan.description}</p>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-4xl font-bold font-display">
-                      ${annual ? Math.round(plan.price * 0.8 * 12) : plan.price}
+                    <span className="text-2xl font-bold font-display">
+                      {plan.priceLabel}
                     </span>
-                    <span className="text-text-tertiary text-sm">/{annual ? "yr" : "mo"}</span>
                   </div>
                 </div>
                 <ul className="space-y-3 mb-8 flex-1 relative z-10">
@@ -69,7 +57,9 @@ export function Pricing() {
                     </li>
                   ))}
                 </ul>
-                <Button variant={plan.popular ? "neon" : "glass"} size="lg" className="w-full relative z-10">{plan.cta}</Button>
+                <a href={plan.href} className="relative z-10">
+                  <Button variant={plan.popular ? "neon" : "glass"} size="lg" className="w-full">{plan.cta}</Button>
+                </a>
               </motion.div>
             </motion.div>
           ))}

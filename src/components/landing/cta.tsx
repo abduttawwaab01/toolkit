@@ -41,7 +41,9 @@ export function CTA() {
                 <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
               </Button>
             </a>
-            <Button variant="ghost" size="xl">See Plans</Button>
+            <a href="#pricing">
+              <Button variant="ghost" size="xl">See Plans</Button>
+            </a>
           </motion.div>
 
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}

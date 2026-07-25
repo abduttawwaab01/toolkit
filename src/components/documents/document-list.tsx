@@ -165,6 +165,8 @@ export function DocumentList({ onEdit }: { onEdit?: (doc: Document) => void }) {
   }, [filteredDocs]);
 
   const handleBulkDelete = useCallback(() => {
+    const count = selectedIds.size;
+    if (!window.confirm(`Delete ${count} document${count > 1 ? "s" : ""}? This cannot be undone.`)) return;
     selectedIds.forEach((id) => deleteDocument(id));
     setSelectedIds(new Set());
   }, [selectedIds, deleteDocument]);

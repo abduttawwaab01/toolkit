@@ -41,7 +41,7 @@ const FORMAT_CONFIG: Record<DocumentFormat, { label: string; color: string; bg: 
 export default function DocumentsPage() {
   const [view, setView] = useState<"dashboard" | "editor">("dashboard");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== "undefined" ? window.innerWidth >= 768 : true);
   const [sidebarTab, setSidebarTab] = useState<"info" | "convert" | "versions" | "export">("info");
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -140,6 +140,7 @@ export default function DocumentsPage() {
   );
 
   const handleBack = useCallback(() => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     if (isDirty) {
       saveCurrentDocument();
     }
@@ -278,7 +279,7 @@ export default function DocumentsPage() {
               )}
             </div>
 
-            <div className="flex flex-1 min-h-0">
+            <div className="flex flex-1 min-h-0 relative">
               <AnimatePresence>
                 {sidebarOpen && currentDocument && (
                   <motion.div
@@ -286,9 +287,9 @@ export default function DocumentsPage() {
                     animate={{ width: 280, opacity: 1 }}
                     exit={{ width: 0, opacity: 0 }}
                     transition={{ duration: 0.2 }}
-                    className="border-r border-border-subtle bg-surface-secondary overflow-hidden shrink-0"
+                    className="md:relative md:border-r border-border-subtle bg-surface-secondary overflow-hidden shrink-0 absolute inset-y-0 left-0 z-30 md:z-auto shadow-2xl md:shadow-none"
                   >
-                    <div className="w-[280px] h-full flex flex-col">
+                    <div className="w-[280px] md:w-[280px] h-full flex flex-col">
                       <div className="flex border-b border-border-subtle">
                         {sidebarItems.map((item) => {
                           const Icon = item.icon;
@@ -338,7 +339,13 @@ export default function DocumentsPage() {
                                 {(() => {
                                   let tags: string[] = [];
                                   try {
-                                    tags = currentDocument?.tags ? JSON.parse(currentDocument.tags as string) : [];
+                                    const raw = currentDocument?.tags;
+                                    if (typeof raw === "string") {
+                                      tags = JSON.parse(raw);
+                                      if (!Array.isArray(tags)) tags = [];
+                                    } else if (Array.isArray(raw)) {
+                                      tags = raw;
+                                    }
                                   } catch { tags = []; }
                                   return tags.map((tag: string) => (
                                     <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-glass-medium border border-border-subtle text-[11px] text-text-secondary">

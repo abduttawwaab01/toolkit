@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { cn, formatBytes } from "@/lib/utils";
 import { useDocumentStore } from "@/lib/document-store";
+import { convertContent } from "@/lib/document-convert";
 
 interface ExportFormat {
   id: string;
@@ -105,7 +106,21 @@ export function DocumentExport() {
       const format = EXPORT_FORMATS.find((f) => f.id === selectedFormat);
       if (!format) throw new Error("Invalid format");
 
+      // Convert rich content to proper format for export
+      const docFormat = useDocumentStore.getState().currentDocument?.format;
       let content = rawContent;
+      if (docFormat === "rich" || docFormat === "html") {
+        try {
+          JSON.parse(rawContent); // check if it's JSON (TipTap content)
+          if (format.id === "html" || format.id === "docx") {
+            content = convertContent("rich", "html", rawContent);
+          } else if (format.id === "md") {
+            content = convertContent("rich", "markdown", rawContent);
+          } else if (format.id === "txt") {
+            content = convertContent("rich", "text", rawContent);
+          }
+        } catch { /* not JSON, use raw */ }
+      }
 
       if (format.id === "html" && !content.trim().startsWith("<")) {
         content = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${fileName}</title></head><body>${content.replace(/\n/g, "<br>")}</body></html>`;

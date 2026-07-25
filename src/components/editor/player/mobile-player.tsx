@@ -32,7 +32,7 @@ export function MobilePlayer() {
       case "swipe-left":
       case "swipe-right": {
         const dir = gesture.type === "swipe-right" ? -1 : 1;
-        const seekAmount = 5;
+        const seekAmount = Math.max(5, project.duration * 0.1);
         setPlayhead(Math.max(0, Math.min(project.duration, playhead + dir * seekAmount)));
         break;
       }

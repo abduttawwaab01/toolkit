@@ -379,15 +379,13 @@ export function applyVignette(data: ImageData, vg: VignetteSettings): void {
 
 export function applyGradientMap(data: ImageData, gm: GradientMapSettings): void {
   if (!gm.colors || gm.colors.length < 2) return;
-  const stops = gm.colors.map((c) => {
-    const div = document.createElement("div");
-    div.style.color = c;
-    document.body.appendChild(div);
-    const cs = getComputedStyle(div).color;
-    document.body.removeChild(div);
-    const m = cs.match(/\d+/g);
-    return m ? [Number(m[0]), Number(m[1]), Number(m[2])] : [0, 0, 0];
-  }) as [number, number, number][];
+  const hexToRgb = (hex: string): [number, number, number] => {
+    const c = hex.replace("#", "");
+    return c.length === 3
+      ? [parseInt(c[0] + c[0], 16), parseInt(c[1] + c[1], 16), parseInt(c[2] + c[2], 16)]
+      : [parseInt(c.slice(0, 2), 16), parseInt(c.slice(2, 4), 16), parseInt(c.slice(4, 6), 16)];
+  };
+  const stops = gm.colors.map(hexToRgb);
   const numStops = stops.length;
   for (let i = 0; i < data.data.length; i += 4) {
     const r = data.data[i], g = data.data[i + 1], b = data.data[i + 2];
@@ -538,6 +536,29 @@ export function applySharpenBrush(data: ImageData, x: number, y: number, radius:
       ) / 4;
       for (let c = 0; c < 3; c++) {
         data.data[idx + c] = clamp(lerp(copy[idx + c], copy[idx + c] + (copy[idx + c] - blurred) * 2, strength));
+      }
+    }
+  }
+}
+
+/* ── Red-eye removal ── */
+
+export function applyRedEye(data: ImageData, x: number, y: number, radius: number, strength: number): void {
+  const w = data.width, h = data.height;
+  const r = Math.max(1, Math.round(radius));
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy > r * r) continue;
+      const px = Math.round(x + dx), py = Math.round(y + dy);
+      if (px < 0 || px >= w || py < 0 || py >= h) continue;
+      const idx = (py * w + px) * 4;
+      const red = data.data[idx], green = data.data[idx + 1], blue = data.data[idx + 2];
+      const ratio = red / Math.max(1, green + blue);
+      if (ratio > 1.5 && red > 80) {
+        const amount = strength * Math.min(1, (ratio - 1.5) / 3);
+        data.data[idx] = clamp(lerp(red, (green + blue) / 2, amount));
+        data.data[idx + 1] = clamp(lerp(green, green * 0.8, amount));
+        data.data[idx + 2] = clamp(lerp(blue, blue * 0.8, amount));
       }
     }
   }
@@ -725,8 +746,9 @@ export function applyFrame(source: HTMLCanvasElement, frame: FrameSettings): HTM
 
 /* ── Drawing ── */
 
-export function drawBrushStroke(canvas: HTMLCanvasElement, points: { x: number; y: number }[], size: number, color: string, opacity: number): void {
+export function drawBrushStroke(canvas: HTMLCanvasElement, points: { x: number; y: number }[], size: number, color: string, opacity: number, blendMode?: string): void {
   const ctx = canvas.getContext("2d")!;
+  ctx.globalCompositeOperation = (blendMode || "source-over") as GlobalCompositeOperation;
   ctx.globalAlpha = opacity; ctx.strokeStyle = color; ctx.lineWidth = size; ctx.lineCap = "round"; ctx.lineJoin = "round";
   if (points.length === 1) {
     ctx.fillStyle = color; ctx.beginPath(); ctx.arc(points[0].x, points[0].y, size / 2, 0, Math.PI * 2); ctx.fill();
@@ -736,6 +758,7 @@ export function drawBrushStroke(canvas: HTMLCanvasElement, points: { x: number; 
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
 }
 
 export function drawEraserStroke(canvas: HTMLCanvasElement, points: { x: number; y: number }[], size: number): void {
@@ -784,6 +807,32 @@ export function drawTextOnCanvas(canvas: HTMLCanvasElement, text: string, x: num
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], x, y + i * fontSize * 1.3);
   ctx.globalAlpha = 1;
+}
+
+/* ── Auto Enhance ── */
+
+export function autoEnhance(canvas: HTMLCanvasElement): Record<string, number> {
+  const ctx = canvas.getContext("2d")!;
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  const hist = new Float32Array(256);
+  let total = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    hist[Math.round(gray)]++;
+    total++;
+  }
+  let min = 0, max = 255, sum = 0;
+  const cutoff = total * 0.005;
+  for (let i = 0; i < 256; i++) { sum += hist[i]; if (sum > cutoff) { min = i; break; } }
+  sum = 0;
+  for (let i = 255; i >= 0; i--) { sum += hist[i]; if (sum > cutoff) { max = i; break; } }
+  const range = max - min;
+  const contrast = range < 180 ? Math.round((180 - range) * 0.8) : 0;
+  const brightness = Math.round((128 - (min + max) / 2) * 0.5);
+  const saturation = contrast > 0 ? Math.min(contrast * 0.3, 15) : 0;
+  return { brightness, contrast, saturation, exposure: 0, temperature: 0, tint: 0,
+    vibrance: 0, highlights: 0, shadows: 0, whites: 0, blacks: 0,
+    clarity: Math.max(contrast * 0.2, 0), sharpen: 0, denoise: 0, gamma: 100 };
 }
 
 /* ── Export ── */

@@ -1,15 +1,32 @@
 "use client";
 
+import { useCallback } from "react";
 import { useImageEditorStore } from "@/lib/image-editor-store";
 import { ADJUSTMENT_DEFINITIONS } from "@/types/image-editor";
+import { autoEnhance } from "@/lib/image/editor";
 
 export function AdjustPanel() {
   const adjustments = useImageEditorStore((s) => s.adjustments);
   const setAdjustment = useImageEditorStore((s) => s.setAdjustment);
+  const displayCanvas = useImageEditorStore((s) => s.displayCanvas);
+  const resetAll = useImageEditorStore((s) => s.resetAll);
+
+  const handleAutoEnhance = useCallback(() => {
+    const canvas = displayCanvas;
+    if (!canvas) return;
+    resetAll();
+    const params = autoEnhance(canvas);
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== 0) setAdjustment(key, value);
+    });
+  }, [displayCanvas, resetAll, setAdjustment]);
 
   return (
     <div className="p-3 space-y-3 overflow-y-auto flex-1">
       <h3 className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider">Adjustments</h3>
+      <button onClick={handleAutoEnhance} className="w-full bg-neon-cyan/15 hover:bg-neon-cyan/25 text-neon-cyan rounded-lg px-3 py-2 text-xs font-medium transition-all mb-2">
+        Auto Enhance
+      </button>
       <div className="space-y-2.5">
         {ADJUSTMENT_DEFINITIONS.map((def) => {
           const val = adjustments[def.key] ?? def.default;

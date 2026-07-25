@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, FormEvent } from "react";
-import { signIn } from "next-auth/react";
+import { signIn, getSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Zap, Loader2, AlertCircle } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -35,8 +35,13 @@ export default function LoginPage() {
       if (result?.error) {
         setError("Invalid email or password");
       } else {
-        router.push("/");
-        router.refresh();
+        const session = await getSession();
+        const role = (session?.user as any)?.role;
+        if (role === "ADMIN") {
+          router.push("/admin");
+        } else {
+          router.push("/");
+        }
       }
     } catch {
       setError("Something went wrong. Please try again.");

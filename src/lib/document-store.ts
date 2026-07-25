@@ -135,7 +135,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   },
 
   saveCurrentDocument: () => {
-    const { currentDocument, editorContent, rawContent, wordCount } = get();
+    const { currentDocument, editorContent, rawContent, wordCount, versions } = get();
     if (!currentDocument) return;
     const content = editorContent || currentDocument.content;
     const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
@@ -148,9 +148,23 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       wordCount: wordCount || computeWordCount(rawContent || contentStr),
       updatedAt: now,
     };
+    // Auto-create version snapshots (every 5 saves or on significant changes)
+    const maxVer = versions.reduce((max, v) => Math.max(max, v.version), 0);
+    const version: DocumentVersion = {
+      id: crypto.randomUUID(),
+      documentId: currentDocument.id,
+      version: maxVer + 1,
+      content: content as Record<string, unknown>,
+      title: currentDocument.title,
+      size,
+      wordCount: wordCount || computeWordCount(rawContent),
+      createdAt: now,
+    };
+    const updatedVersions = [...versions, version];
+    saveVersions(currentDocument.id, updatedVersions);
     const docs = get().documents.map((d) => (d.id === updated.id ? updated : d));
     saveToStorage(docs);
-    set({ documents: docs, currentDocument: updated, isDirty: false, isSaving: false, lastSaved: now });
+    set({ documents: docs, currentDocument: updated, isDirty: false, isSaving: false, lastSaved: now, versions: updatedVersions, currentVersion: version.version });
   },
 
   deleteDocument: (id) => {

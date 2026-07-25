@@ -53,6 +53,7 @@ export function MarkdownEditor({
   const [splitRatio, setSplitRatio] = useState(50);
   const isDragging = useRef(false);
 
+  const isFirstRender = useRef(true);
   useEffect(() => {
     setLines(markdown.split("\n"));
     setRawContent(markdown);
@@ -62,8 +63,13 @@ export function MarkdownEditor({
       .filter((w) => w.length > 0).length;
     setWordCount(words);
     setCharCount(text.length);
-    setIsDirty(markdown !== initialContent);
-    onUpdate?.(markdown);
+    if (!isFirstRender.current) {
+      setIsDirty(true);
+      onUpdate?.(markdown);
+    } else {
+      setIsDirty(false);
+      isFirstRender.current = false;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [markdown]);
 
@@ -125,26 +131,32 @@ export function MarkdownEditor({
     [markdown],
   );
 
-  const startDrag = useCallback((e: React.MouseEvent) => {
+  const startDrag = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     isDragging.current = true;
+    const clientX = "touches" in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
 
-    const onMouseMove = (ev: MouseEvent) => {
+    const onMove = (ev: MouseEvent | TouchEvent) => {
       if (!isDragging.current || !containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
-      const x = ev.clientX - rect.left;
+      const cx = "touches" in ev ? ev.touches[0].clientX : (ev as MouseEvent).clientX;
+      const x = cx - rect.left;
       const pct = Math.min(Math.max((x / rect.width) * 100, 20), 80);
       setSplitRatio(pct);
     };
 
-    const onMouseUp = () => {
+    const onUp = () => {
       isDragging.current = false;
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", onUp);
     };
 
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    document.addEventListener("touchmove", onMove, { passive: false });
+    document.addEventListener("touchend", onUp);
   }, []);
 
   const wordCount = markdown
@@ -210,6 +222,7 @@ export function MarkdownEditor({
         <div
           ref={dividerRef}
           onMouseDown={startDrag}
+          onTouchStart={startDrag}
           className={cn(
             "w-1 cursor-col-resize flex-shrink-0 relative group",
             "bg-white/[0.06] hover:bg-neon-cyan/40 transition-colors duration-200",

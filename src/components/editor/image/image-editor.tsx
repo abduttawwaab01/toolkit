@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useImageEditorStore } from "@/lib/image-editor-store";
 import { ImageCanvas } from "./image-canvas";
 import { AdjustPanel } from "./adjust-panel";
@@ -35,6 +35,7 @@ const GRID_TYPES: { key: GridType; label: string }[] = [
 ];
 
 export function ImageEditor() {
+  const [showPanel, setShowPanel] = useState(true);
   const open = useImageEditorStore((s) => s.open);
   const activeTool = useImageEditorStore((s) => s.activeTool);
   const setActiveTool = useImageEditorStore((s) => s.setActiveTool);
@@ -95,14 +96,27 @@ export function ImageEditor() {
   }, [activeTool]);
 
   const doBgRemove = useCallback(async () => {
-    const { chromaKeyRemove } = await import("@/lib/background/index");
-    const originalCanvas = useImageEditorStore.getState().originalCanvas;
-    if (!originalCanvas) return;
-    const result = chromaKeyRemove(originalCanvas, {
-      color: [0, 255, 0], similarity: 0.3, smoothness: 0.1, spillReduction: 0,
-    });
-    // Replace the display canvas with the result
-    useImageEditorStore.setState({ displayCanvas: result, renderedCanvas: result });
+    const state = useImageEditorStore.getState();
+    const canvas = state.originalCanvas || state.displayCanvas;
+    if (!canvas) return;
+    try {
+      // Auto-detect dominant edge color for chroma key
+      const ctx = canvas.getContext("2d")!;
+      const sampleSize = 5;
+      const edgeData = ctx.getImageData(0, 0, canvas.width, sampleSize).data;
+      const edgeData2 = ctx.getImageData(0, canvas.height - sampleSize, canvas.width, sampleSize).data;
+      let r = 0, g = 0, b = 0, count = 0;
+      for (let i = 0; i < edgeData.length; i += 4) { r += edgeData[i]; g += edgeData[i+1]; b += edgeData[i+2]; count++; }
+      for (let i = 0; i < edgeData2.length; i += 4) { r += edgeData2[i]; g += edgeData2[i+1]; b += edgeData2[i+2]; count++; }
+      const avgColor: [number, number, number] = [r/count, g/count, b/count];
+      const { chromaKeyRemove } = await import("@/lib/background/index");
+      const result = chromaKeyRemove(canvas, {
+        color: avgColor, similarity: 0.4, smoothness: 0.1, spillReduction: 0.05,
+      });
+      useImageEditorStore.setState({ displayCanvas: result, renderedCanvas: result });
+    } catch (err) {
+      console.error("Background removal failed:", err);
+    }
   }, []);
 
   if (!open) return null;
@@ -110,14 +124,14 @@ export function ImageEditor() {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[#050508]">
       {/* Top toolbar */}
-      <header className="glass border-b border-border-subtle h-11 flex items-center justify-between px-3 shrink-0 z-10 overflow-x-auto">
-        <div className="flex items-center gap-0.5">
+      <header className="glass border-b border-border-subtle h-11 flex items-center justify-between px-3 shrink-0 z-10">
+        <div className="flex items-center gap-0.5 overflow-x-auto scrollbar-none flex-1 mr-2">
           <button onClick={closeEditor} className="px-2 py-1.5 rounded-lg text-xs text-text-tertiary hover:text-text-primary hover:bg-glass-medium transition-all mr-1 shrink-0">
             ✕
           </button>
           <div className="w-px h-5 bg-border-subtle mx-1 shrink-0" />
           {TOOLS.map((t) => (
-            <button key={t.key} onClick={() => setActiveTool(t.key)}
+            <button key={t.key} onClick={() => { setActiveTool(t.key); setShowPanel(true); }}
               className={`px-2 py-1.5 rounded-lg text-[10px] font-medium transition-all flex items-center gap-1 shrink-0 ${
                 activeTool === t.key ? "bg-neon-cyan/15 text-neon-cyan" : "text-text-tertiary hover:text-text-primary hover:bg-glass-medium"
               }`}
@@ -160,13 +174,19 @@ export function ImageEditor() {
             title="Image Info (I)"
           >ℹ</button>
           <button onClick={resetAll} className="px-2 py-1.5 rounded-lg text-[10px] text-text-tertiary hover:text-neon-pink hover:bg-glass-medium transition-all" title="Reset All">↺</button>
+          <div className="w-px h-5 bg-border-subtle mx-1 md:hidden" />
+          <button onClick={() => setShowPanel(p => !p)}
+            className="md:hidden px-2 py-1.5 rounded-lg text-[10px] text-text-tertiary hover:text-text-primary hover:bg-glass-medium transition-all" title="Toggle Panel">
+            {showPanel ? "▶" : "◀"}
+          </button>
         </div>
       </header>
 
       {/* Main body */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         <ImageCanvas />
-        <aside className="w-[250px] glass border-l border-border-subtle overflow-y-auto flex flex-col shrink-0">
+        {/* Desktop sidebar */}
+        <aside className="hidden md:flex w-[250px] glass border-l border-border-subtle overflow-y-auto flex-col shrink-0">
           <div className="flex-1 flex flex-col overflow-y-auto min-h-0">{renderPanel()}</div>
           <div className="border-t border-border-subtle p-2 space-y-1.5">
             <button onClick={doBgRemove} className="w-full glass rounded-lg px-2 py-1.5 text-[10px] text-neon-cyan hover:bg-glass-medium transition-all flex items-center justify-center gap-1">
@@ -175,6 +195,22 @@ export function ImageEditor() {
             <ExportDialog />
           </div>
         </aside>
+        {/* Mobile overlay panel */}
+        {showPanel && (
+          <aside className="md:hidden absolute inset-y-0 right-0 w-[280px] glass border-l border-border-subtle overflow-y-auto flex flex-col z-20 shadow-2xl">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle">
+              <span className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider">{activeTool}</span>
+              <button onClick={() => setShowPanel(false)} className="text-text-tertiary hover:text-text-primary text-xs">✕</button>
+            </div>
+            <div className="flex-1 flex flex-col overflow-y-auto min-h-0">{renderPanel()}</div>
+            <div className="border-t border-border-subtle p-2 space-y-1.5">
+              <button onClick={doBgRemove} className="w-full glass rounded-lg px-2 py-1.5 text-[10px] text-neon-cyan hover:bg-glass-medium transition-all flex items-center justify-center gap-1">
+                ✨ AI Remove Background
+              </button>
+              <ExportDialog />
+            </div>
+          </aside>
+        )}
       </div>
     </div>
   );

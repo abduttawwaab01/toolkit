@@ -187,10 +187,15 @@ export function DocumentConverter() {
   const handleSaveAsNew = useCallback(() => {
     if (!result) return;
     try {
-      createDocument({
+      const doc = createDocument({
         title: `${currentDocument?.title ?? "Untitled"} (${FORMAT_OPTIONS.find((f) => f.id === toFormat)?.name})`,
         format: toFormat,
       });
+      // Update the newly created document with the converted content
+      const updatedDoc = { ...doc, content: result as any, wordCount: result.trim() ? result.trim().split(/\s+/).length : 0 };
+      const docs = useDocumentStore.getState().documents.map((d) => d.id === doc.id ? updatedDoc : d);
+      localStorage.setItem("toolkit-documents", JSON.stringify(docs));
+      useDocumentStore.setState({ documents: docs });
     } catch {
       setError("Failed to save document");
     }

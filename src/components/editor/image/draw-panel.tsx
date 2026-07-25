@@ -2,7 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useImageEditorStore } from "@/lib/image-editor-store";
-import { drawBrushStroke, drawEraserStroke, drawShape, drawTextOnCanvas, applyBlurBrush, applySharpenBrush, applyCloneStamp } from "@/lib/image/editor";
+import { drawBrushStroke, drawEraserStroke, drawShape, drawTextOnCanvas, applyBlurBrush, applySharpenBrush, applyCloneStamp, applyRedEye } from "@/lib/image/editor";
 
 const COLORS = ["#ffffff", "#000000", "#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ff00ff", "#00ffff", "#ff6b35", "#4facfe", "#bf6aff", "#ff006e", "#a67c52", "#888888"];
 const FONTS = ["Arial", "Helvetica", "Georgia", "Times New Roman", "Courier New", "Verdana", "Impact", "Comic Sans MS"];
@@ -40,6 +40,8 @@ export function DrawPanel() {
   const cloneSrcY = useImageEditorStore((s) => s.cloneSrcY);
   const cloneSampled = useImageEditorStore((s) => s.cloneSampled);
   const setCloneSrc = useImageEditorStore((s) => s.setCloneSrc);
+  const blendMode = useImageEditorStore((s) => s.blendMode);
+  const setBlendMode = useImageEditorStore((s) => s.setBlendMode);
 
   const getPos = useCallback((e: { clientX: number; clientY: number }) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -86,19 +88,20 @@ export function DrawPanel() {
       return;
     }
 
-    if (isDrawing && (drawTool === "brush" || drawTool === "eraser")) {
-      const newPoints = [...points, pos];
-      setPoints(newPoints);
-      if (drawTool === "eraser") drawEraserStroke(drawingCanvas, [points[points.length - 1], pos], brushSize * zoom);
-      else drawBrushStroke(drawingCanvas, [points[points.length - 1], pos], brushSize * zoom, brushColor, brushOpacity);
-      return;
-    }
+      if (isDrawing && (drawTool === "brush" || drawTool === "eraser")) {
+        const newPoints = [...points, pos];
+        setPoints(newPoints);
+        if (drawTool === "eraser") drawEraserStroke(drawingCanvas, [points[points.length - 1], pos], brushSize * zoom);
+        else drawBrushStroke(drawingCanvas, [points[points.length - 1], pos], brushSize * zoom, brushColor, brushOpacity, blendMode);
+        return;
+      }
 
-    if (isDrawing && (drawTool === "blur" || drawTool === "sharpen") && renderedCanvas) {
+    if (isDrawing && (drawTool === "blur" || drawTool === "sharpen" || drawTool === "redeye") && renderedCanvas) {
       const ctx = renderedCanvas.getContext("2d")!;
       const imageData = ctx.getImageData(0, 0, renderedCanvas.width, renderedCanvas.height);
       if (drawTool === "blur") applyBlurBrush(imageData, pos.x, pos.y, brushSize, brushOpacity);
-      else applySharpenBrush(imageData, pos.x, pos.y, brushSize, brushOpacity);
+      else if (drawTool === "sharpen") applySharpenBrush(imageData, pos.x, pos.y, brushSize, brushOpacity);
+      else applyRedEye(imageData, pos.x, pos.y, brushSize, brushOpacity);
       ctx.putImageData(imageData, 0, 0);
       useImageEditorStore.getState().reRender();
     }
@@ -145,6 +148,7 @@ export function DrawPanel() {
           { id: "blur", label: "Blur", icon: "🌫" },
           { id: "sharpen", label: "Sharpen", icon: "🔷" },
           { id: "clone", label: "Clone", icon: "◎" },
+          { id: "redeye", label: "Red-eye", icon: "👁" },
           { id: "rect", label: "Rect", icon: "▭" },
           { id: "circle", label: "Circle", icon: "○" },
           { id: "line", label: "Line", icon: "╱" },
@@ -159,6 +163,26 @@ export function DrawPanel() {
         ))}
       </div>
 
+      {(drawTool === "brush" || drawTool === "clone") && (
+        <div>
+          <label className="text-[10px] text-text-tertiary mb-1 block">Blend Mode</label>
+          <select value={blendMode} onChange={(e) => setBlendMode(e.target.value)}
+            className="w-full glass rounded-lg px-2 py-1.5 text-[10px] text-text-primary focus:outline-none focus:border-neon-cyan/30"
+          >
+            <option value="source-over">Normal</option>
+            <option value="multiply">Multiply</option>
+            <option value="screen">Screen</option>
+            <option value="overlay">Overlay</option>
+            <option value="soft-light">Soft Light</option>
+            <option value="hard-light">Hard Light</option>
+            <option value="color-dodge">Dodge</option>
+            <option value="color-burn">Burn</option>
+            <option value="difference">Difference</option>
+            <option value="exclusion">Exclusion</option>
+          </select>
+        </div>
+      )}
+
       {drawTool === "clone" && (
         <div className="text-[10px] text-text-tertiary p-2 glass rounded-lg">
           {cloneSampled
@@ -168,7 +192,7 @@ export function DrawPanel() {
         </div>
       )}
 
-      {(drawTool === "brush" || drawTool === "eraser" || drawTool === "blur" || drawTool === "sharpen" || drawTool === "clone") && (
+      {(drawTool === "brush" || drawTool === "eraser" || drawTool === "blur" || drawTool === "sharpen" || drawTool === "redeye" || drawTool === "clone") && (
         <>
           <div>
             <label className="text-[10px] text-text-tertiary">Size: {brushSize}px</label>

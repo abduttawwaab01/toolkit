@@ -12,9 +12,14 @@ export function ImageCanvas() {
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const lastPinchDist = useRef(0);
+  const isDrawing = useRef(false);
+  const drawPoints = useRef<{ x: number; y: number }[]>([]);
+  const shapeStart = useRef<{ x: number; y: number } | null>(null);
+  const rafThrottle = useRef<number | null>(null);
 
   const displayCanvas = useImageEditorStore((s) => s.displayCanvas);
   const drawingCanvas = useImageEditorStore((s) => s.drawingCanvas);
+  const renderedCanvas = useImageEditorStore((s) => s.renderedCanvas);
   const zoom = useImageEditorStore((s) => s.zoom);
   const panX = useImageEditorStore((s) => s.panX);
   const panY = useImageEditorStore((s) => s.panY);
@@ -29,6 +34,16 @@ export function ImageCanvas() {
   const setEyedropperColor = useImageEditorStore((s) => s.setEyedropperColor);
   const setZoom = useImageEditorStore((s) => s.setZoom);
   const setPan = useImageEditorStore((s) => s.setPan);
+  const activeTool = useImageEditorStore((s) => s.activeTool);
+  const drawTool = useImageEditorStore((s) => s.drawTool);
+  const brushSize = useImageEditorStore((s) => s.brushSize);
+  const brushColor = useImageEditorStore((s) => s.brushColor);
+  const brushOpacity = useImageEditorStore((s) => s.brushOpacity);
+  const blendMode = useImageEditorStore((s) => s.blendMode);
+  const cloneSampled = useImageEditorStore((s) => s.cloneSampled);
+  const cloneSrcX = useImageEditorStore((s) => s.cloneSrcX);
+  const cloneSrcY = useImageEditorStore((s) => s.cloneSrcY);
+  const setCloneSrc = useImageEditorStore((s) => s.setCloneSrc);
   const [touchZoom, setTouchZoom] = useState(1);
 
   const drawOverlay = useCallback(() => {
@@ -135,41 +150,153 @@ export function ImageCanvas() {
     drawOverlay();
   }, [displayCanvas, drawingCanvas, zoom, showBeforeAfter, originalCanvas, drawOverlay]);
 
+  const getCanvasPos = useCallback((clientX: number, clientY: number) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return { x: (clientX - rect.left) / zoom, y: (clientY - rect.top) / zoom };
+  }, [zoom]);
+
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     setZoom(zoom * (e.deltaY > 0 ? 0.9 : 1.1));
   }, [zoom, setZoom]);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  const handlePointerDown = useCallback(async (e: React.PointerEvent) => {
+    const pos = getCanvasPos(e.clientX, e.clientY);
+
     if (eyedropperActive && displayCanvas) {
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const x = (e.clientX - rect.left) / zoom;
-      const y = (e.clientY - rect.top) / zoom;
-      const color = getPixelColor(displayCanvas, x, y);
+      const color = getPixelColor(displayCanvas, pos.x, pos.y);
       setEyedropperColor(color);
       return;
     }
-    if (e.button === 1 || e.altKey) {
+
+    if (activeTool === "draw" && drawingCanvas) {
+      e.preventDefault();
+      if (drawTool === "clone") {
+        if (!cloneSampled) {
+          setCloneSrc(pos.x, pos.y);
+          return;
+        }
+        isDrawing.current = true;
+        drawPoints.current = [pos];
+        return;
+      }
+      if (drawTool === "text") { shapeStart.current = pos; return; }
+      if (["rect", "circle", "line", "arrow"].includes(drawTool)) { shapeStart.current = pos; return; }
+      isDrawing.current = true;
+      drawPoints.current = [pos];
+
+      if (drawTool === "brush" || drawTool === "eraser") {
+        const ctx = drawingCanvas.getContext("2d")!;
+        if (drawTool === "eraser") {
+          const { drawEraserStroke } = await import("@/lib/image/editor");
+          drawEraserStroke(drawingCanvas, [pos, pos], brushSize);
+        } else {
+          const { drawBrushStroke } = await import("@/lib/image/editor");
+          drawBrushStroke(drawingCanvas, [pos, pos], brushSize, brushColor, brushOpacity, blendMode);
+        }
+      }
+      return;
+    }
+
+    if (e.button === 1 || e.altKey || e.pointerType === "touch") {
       setIsPanning(true);
       setPanStart({ x: e.clientX - panX, y: e.clientY - panY });
     }
-  }, [eyedropperActive, displayCanvas, zoom, panX, panY, setEyedropperColor]);
+  }, [eyedropperActive, displayCanvas, zoom, panX, panY, setEyedropperColor, activeTool, drawingCanvas, drawTool, brushSize, brushColor, brushOpacity, cloneSampled, setCloneSrc, getCanvasPos]);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isPanning) setPan(e.clientX - panStart.x, e.clientY - panStart.y);
-  }, [isPanning, panStart, setPan]);
+  const handlePointerMove = useCallback(async (e: React.PointerEvent) => {
+    if (isPanning) {
+      setPan(e.clientX - panStart.x, e.clientY - panStart.y);
+      return;
+    }
 
-  const handleMouseUp = useCallback(() => setIsPanning(false), []);
+    if (activeTool === "draw" && isDrawing.current && drawingCanvas && renderedCanvas) {
+      const pos = getCanvasPos(e.clientX, e.clientY);
 
-  // Touch pinch-zoom
+      if (drawTool === "clone" && cloneSampled) {
+        const newPoints = [...drawPoints.current, pos];
+        drawPoints.current = newPoints;
+        const ctx = drawingCanvas.getContext("2d")!;
+        const srcData = renderedCanvas.getContext("2d")!.getImageData(0, 0, renderedCanvas.width, renderedCanvas.height);
+        const dstData = ctx.getImageData(0, 0, drawingCanvas.width, drawingCanvas.height);
+        const dx = pos.x - drawPoints.current[drawPoints.current.length - 2].x;
+        const dy = pos.y - drawPoints.current[drawPoints.current.length - 2].y;
+        const { applyCloneStamp } = await import("@/lib/image/editor");
+        applyCloneStamp(dstData, renderedCanvas, cloneSrcX + dx, cloneSrcY + dy, pos.x, pos.y, brushSize, brushOpacity);
+        ctx.putImageData(dstData, 0, 0);
+        return;
+      }
+
+      if (drawTool === "brush" || drawTool === "eraser") {
+        const newPoints = [...drawPoints.current, pos];
+        drawPoints.current = newPoints;
+        const lastP = drawPoints.current[drawPoints.current.length - 2];
+        if (drawTool === "eraser") {
+          const { drawEraserStroke } = await import("@/lib/image/editor");
+          drawEraserStroke(drawingCanvas, [lastP, pos], brushSize);
+        } else {
+          const { drawBrushStroke } = await import("@/lib/image/editor");
+          drawBrushStroke(drawingCanvas, [lastP, pos], brushSize, brushColor, brushOpacity, blendMode);
+        }
+        return;
+      }
+
+      if (drawTool === "blur" || drawTool === "sharpen" || drawTool === "redeye") {
+        if (rafThrottle.current) return;
+        rafThrottle.current = requestAnimationFrame(async () => {
+          rafThrottle.current = null;
+          const ctx = renderedCanvas.getContext("2d")!;
+          const imageData = ctx.getImageData(0, 0, renderedCanvas.width, renderedCanvas.height);
+          if (drawTool === "blur") {
+            const { applyBlurBrush } = await import("@/lib/image/editor");
+            applyBlurBrush(imageData, pos.x, pos.y, brushSize, brushOpacity);
+          } else if (drawTool === "sharpen") {
+            const { applySharpenBrush } = await import("@/lib/image/editor");
+            applySharpenBrush(imageData, pos.x, pos.y, brushSize, brushOpacity);
+          } else {
+            const { applyRedEye } = await import("@/lib/image/editor");
+            applyRedEye(imageData, pos.x, pos.y, brushSize, brushOpacity);
+          }
+          ctx.putImageData(imageData, 0, 0);
+          useImageEditorStore.getState().reRender();
+        });
+        return;
+      }
+    }
+  }, [isPanning, panStart, setPan, activeTool, drawingCanvas, renderedCanvas, drawTool, brushSize, brushColor, brushOpacity, cloneSampled, cloneSrcX, cloneSrcY, getCanvasPos]);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    if (isPanning) {
+      setIsPanning(false);
+      return;
+    }
+    if (activeTool === "draw" && isDrawing.current && drawPoints.current.length > 0) {
+      isDrawing.current = false;
+      if (drawTool !== "blur" && drawTool !== "sharpen") {
+        useImageEditorStore.getState().addDrawingEntry({ id: crypto.randomUUID(), tool: drawTool as any, data: {} });
+      }
+    }
+    drawPoints.current = [];
+    shapeStart.current = null;
+  }, [isPanning, activeTool, drawTool]);
+
+  // Touch pinch-zoom + pan
+  const prevTouchCenter = useRef<{ x: number; y: number } | null>(null);
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2) {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       lastPinchDist.current = Math.sqrt(dx * dx + dy * dy);
+      prevTouchCenter.current = {
+        x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+      };
+    } else if (e.touches.length === 1 && activeTool !== "draw") {
+      setIsPanning(true);
+      setPanStart({ x: e.touches[0].clientX - panX, y: e.touches[0].clientY - panY });
     }
-  }, []);
+  }, [activeTool, panX, panY]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2) {
@@ -182,8 +309,26 @@ export function ImageCanvas() {
         setZoom(zoom * scale);
       }
       lastPinchDist.current = dist;
+
+      // Two-finger pan
+      const center = {
+        x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+      };
+      if (prevTouchCenter.current) {
+        setPan(panX + (center.x - prevTouchCenter.current.x), panY + (center.y - prevTouchCenter.current.y));
+      }
+      prevTouchCenter.current = center;
+    } else if (e.touches.length === 1 && isPanning && activeTool !== "draw") {
+      setPan(e.touches[0].clientX - panStart.x, e.touches[0].clientY - panStart.y);
     }
-  }, [zoom, setZoom]);
+  }, [zoom, setZoom, panX, panY, setPan, isPanning, panStart, activeTool]);
+
+  const handleTouchEnd = useCallback(() => {
+    setIsPanning(false);
+    prevTouchCenter.current = null;
+    lastPinchDist.current = 0;
+  }, []);
 
   const fitToContainer = useCallback(() => {
     const container = containerRef.current;
@@ -197,10 +342,16 @@ export function ImageCanvas() {
   if (!displayCanvas) return null;
 
   return (
-    <div ref={containerRef} className="flex-1 flex items-center justify-center overflow-hidden bg-[#0a0a0f] relative select-none"
-      onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
-      onTouchStart={handleTouchStart} onTouchMove={handleTouchMove}
-      style={{ cursor: isPanning ? "grabbing" : eyedropperActive ? "crosshair" : "grab" }}
+    <div ref={containerRef} className="flex-1 flex items-center justify-center overflow-hidden bg-[#0a0a0f] relative select-none touch-none"
+      onWheel={handleWheel}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      style={{ cursor: isPanning ? "grabbing" : eyedropperActive ? "crosshair" : activeTool === "draw" ? "crosshair" : "grab" }}
     >
       <div style={{ transform: `translate(${panX}px, ${panY}px)` }} className="relative">
         <canvas ref={canvasRef} className="block" />
@@ -229,6 +380,7 @@ export function ImageCanvas() {
         <span className="tabular-nums w-10 text-center">{Math.round(zoom * 100)}%</span>
         <button onClick={() => setZoom(zoom * 1.2)} className="px-1 hover:text-text-primary">+</button>
         <button onClick={fitToContainer} className="px-1 hover:text-text-primary">Fit</button>
+        <button onClick={() => setZoom(1)} className="px-1 hover:text-text-primary">1:1</button>
       </div>
     </div>
   );

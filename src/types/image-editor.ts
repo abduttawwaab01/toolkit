@@ -1,6 +1,6 @@
 export type ImageTool = "adjust" | "color-grade" | "filters" | "crop" | "select" | "draw" | "effects" | "resize" | "frame"
 
-export type DrawTool = "brush" | "eraser" | "blur" | "sharpen" | "clone" | "rect" | "circle" | "line" | "arrow" | "text"
+export type DrawTool = "brush" | "eraser" | "blur" | "sharpen" | "clone" | "rect" | "circle" | "line" | "arrow" | "text" | "redeye"
 
 export type SelectTool = "rect" | "ellipse"
 
@@ -90,6 +90,19 @@ export interface FilterDef {
   category: "warm" | "cool" | "vintage" | "bw" | "dramatic" | "artistic" | "cinematic"
   apply: (r: number, g: number, b: number, strength: number) => [number, number, number]
 }
+
+export const DRAW_BLEND_MODES = [
+  { id: "source-over", label: "Normal" },
+  { id: "multiply", label: "Multiply" },
+  { id: "screen", label: "Screen" },
+  { id: "overlay", label: "Overlay" },
+  { id: "soft-light", label: "Soft Light" },
+  { id: "hard-light", label: "Hard Light" },
+  { id: "color-dodge", label: "Dodge" },
+  { id: "color-burn", label: "Burn" },
+  { id: "difference", label: "Difference" },
+  { id: "exclusion", label: "Exclusion" },
+] as const
 
 export const EXPORT_FORMATS = ["png", "jpeg", "webp"] as const
 export type ExportFormat = (typeof EXPORT_FORMATS)[number]

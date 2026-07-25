@@ -42,48 +42,80 @@ export function VideoEnhancerPanel() {
         video.load();
       });
 
+      const outW = targetQuality.width;
+      const outH = targetQuality.height;
+      const compositeCanvas = document.createElement("canvas");
+      compositeCanvas.width = outW;
+      compositeCanvas.height = outH;
+      const compCtx = compositeCanvas.getContext("2d")!;
+
+      const stream = compositeCanvas.captureStream(30);
+      const mimeTypes = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+      let recorder: MediaRecorder | null = null;
+      for (const m of mimeTypes) {
+        if (MediaRecorder.isTypeSupported(m)) { recorder = new MediaRecorder(stream, { mimeType: m, videoBitsPerSecond: targetQuality.bitrate }); break; }
+      }
+      if (!recorder) recorder = new MediaRecorder(stream, { videoBitsPerSecond: targetQuality.bitrate });
+
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
       video.currentTime = 0;
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("Seek timeout")), 5000);
-        video.addEventListener("seeked", () => { clearTimeout(timeout); resolve(); }, { once: true });
-        video.addEventListener("error", () => { clearTimeout(timeout); reject(new Error("Video seek failed")); });
+      await new Promise<void>((resolve) => { video.addEventListener("seeked", () => resolve(), { once: true }); });
+
+      const totalDuration = video.duration || 10;
+      const fps = 30;
+      const frameInterval = 1000 / fps;
+      let currentFrame = 0;
+
+      const processFrame = (time: number) => {
+        if (time >= totalDuration || processingRef.current === false) {
+          if (recorder?.state === "recording") recorder.stop();
+          return;
+        }
+
+        video.currentTime = time;
+        compCtx.drawImage(video, 0, 0, outW, outH);
+
+        const frameCanvas = document.createElement("canvas");
+        frameCanvas.width = outW;
+        frameCanvas.height = outH;
+        frameCanvas.getContext("2d")!.drawImage(compositeCanvas, 0, 0);
+
+        const enhanced = enhanceVideoFrame(frameCanvas, {
+          targetWidth: outW, targetHeight: outH,
+          sharpening: sharpen, contrast, saturation, denoise,
+        });
+        compCtx.clearRect(0, 0, outW, outH);
+        compCtx.drawImage(enhanced, 0, 0);
+
+        currentFrame++;
+        setTimeout(() => processFrame(time + 1 / fps), frameInterval);
+      };
+
+      return new Promise<void>((resolve, reject) => {
+        recorder!.onstop = () => {
+          const blob = new Blob(chunks, { type: recorder!.mimeType });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${clip!.name.replace(/\.[^.]+$/, "")}_enhanced.webm`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          toast.success("Enhancement complete", `Upscaled to ${targetQuality.label}`);
+          setProcessing(false);
+          processingRef.current = false;
+          resolve();
+        };
+        recorder!.onerror = () => { reject(new Error("Recording failed")); };
+        recorder!.start(100);
+        processFrame(0);
       });
-
-      const sourceCanvas = document.createElement("canvas");
-      sourceCanvas.width = video.videoWidth;
-      sourceCanvas.height = video.videoHeight;
-      const sourceCtx = sourceCanvas.getContext("2d")!;
-      sourceCtx.drawImage(video, 0, 0);
-
-      const enhanced = enhanceVideoFrame(sourceCanvas, {
-        targetWidth: targetQuality.width,
-        targetHeight: targetQuality.height,
-        sharpening: sharpen,
-        contrast,
-        saturation,
-        denoise,
-      });
-
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        enhanced.toBlob((b) => {
-          if (b) resolve(b);
-          else reject(new Error("Canvas toBlob returned null"));
-        }, "image/png");
-      });
-
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${clip.name.replace(/\.[^.]+$/, "")}_enhanced.png`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-
-      toast.success("Enhancement complete", `Upscaled to ${targetQuality.label}`);
     } catch (err: any) {
       toast.error("Enhancement failed", err?.message || "Unknown error");
+      setProcessing(false);
+      processingRef.current = false;
     }
-    setProcessing(false);
-    processingRef.current = false;
   };
 
   const handleCompress = async () => {
@@ -159,7 +191,7 @@ export function VideoEnhancerPanel() {
             {processing ? (
               <><span className="size-3 rounded-full border-2 border-neon-cyan border-t-transparent animate-spin" /> Enhancing...</>
             ) : (
-              <><Sparkles size={11} /> Enhance &amp; Export PNG</>
+              <><Sparkles size={11} /> Enhance &amp; Export WebM</>
             )}
           </button>
         </div>

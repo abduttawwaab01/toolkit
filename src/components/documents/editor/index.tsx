@@ -35,7 +35,6 @@ export function Editor({
 }: EditorProps) {
   switch (format) {
     case "rich":
-    case "html":
       return (
         <RichEditor
           documentId={documentId}
@@ -67,6 +66,7 @@ export function Editor({
         />
       );
 
+    case "html":
     case "text":
       return (
         <TextEditor

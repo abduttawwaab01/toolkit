@@ -48,6 +48,9 @@ interface ImageEditorState {
   shapeFill: string; shapeStroke: string; shapeStrokeWidth: number;
   textFont: string; textSize: number;
 
+  // Blending mode for draw tools
+  blendMode: string;
+
   // Clone stamp
   cloneSrcX: number; cloneSrcY: number; cloneSampled: boolean;
 
@@ -113,6 +116,7 @@ interface ImageEditorState {
   setTextFont: (f: string) => void;
   setTextSize: (s: number) => void;
   setCloneSrc: (x: number, y: number) => void;
+  setBlendMode: (b: string) => void;
 
   setSelection: (s: SelectionState | null) => void;
   setSelectTool: (t: SelectTool) => void;
@@ -131,6 +135,7 @@ interface ImageEditorState {
   setExportQuality: (q: number) => void;
   setExportWidth: (w: number) => void;
   setExportHeight: (h: number) => void;
+  setExportLockAspect: (v: boolean) => void;
 
   undo: () => void;
   redo: () => void;
@@ -181,6 +186,7 @@ export const useImageEditorStore = create<ImageEditorState>()((set, get) => ({
   drawTool: "brush", brushSize: 10, brushColor: "#ffffff", brushOpacity: 1,
   shapeFill: "transparent", shapeStroke: "#ffffff", shapeStrokeWidth: 3,
   textFont: "Arial", textSize: 48, cloneSrcX: 0, cloneSrcY: 0, cloneSampled: false,
+  blendMode: "source-over",
   selection: null, selectTool: "rect", selectFeather: 0,
   eyedropperActive: false, eyedropperColor: null,
   activeTool: "adjust", zoom: 1, panX: 0, panY: 0,
@@ -189,26 +195,31 @@ export const useImageEditorStore = create<ImageEditorState>()((set, get) => ({
   history: [], future: [],
 
   openEditor: async (src) => {
-    const { loadImageToCanvas } = await import("@/lib/image/editor");
-    const { canvas, width, height } = await loadImageToCanvas(src);
-    const orig = cloneCanvas(canvas);
-    set({
-      open: true, sourceSrc: src, sourceCanvas: canvas, originalCanvas: orig,
-      originalWidth: width, originalHeight: height, displayCanvas: canvas,
-      renderedCanvas: cloneCanvas(canvas),
-      drawingCanvas: createDrawingCanvas(width, height), drawingEntries: [],
-      adjustments: defaultAdjustments(),
-      curves: null, hsl: { ...DEFAULT_HSL }, colorBalance: { ...DEFAULT_COLOR_BALANCE },
-      vignette: { ...DEFAULT_VIGNETTE },
-      gradientMap: null, posterize: null, threshold: null, pixelate: null,
-      activeFilter: null, filterStrength: 50, cropRect: null,
-      rotation: 0, flippedH: false, flippedV: false, resizeTo: null, frame: defaultFrame(),
-      selection: null, selectFeather: 0, eyedropperActive: false, eyedropperColor: null,
-      activeTool: "adjust", zoom: 1, panX: 0, panY: 0, showBeforeAfter: false,
-      gridType: "none", showImageInfo: false,
-      exportFormat: "png", exportQuality: 0.92, exportWidth: width, exportHeight: height, exportLockAspect: true,
-      history: [], future: [],
-    });
+    try {
+      const { loadImageToCanvas } = await import("@/lib/image/editor");
+      const { canvas, width, height } = await loadImageToCanvas(src);
+      const orig = cloneCanvas(canvas);
+      set({
+        open: true, sourceSrc: src, sourceCanvas: canvas, originalCanvas: orig,
+        originalWidth: width, originalHeight: height, displayCanvas: canvas,
+        renderedCanvas: cloneCanvas(canvas),
+        drawingCanvas: createDrawingCanvas(width, height), drawingEntries: [],
+        adjustments: defaultAdjustments(),
+        curves: null, hsl: { ...DEFAULT_HSL }, colorBalance: { ...DEFAULT_COLOR_BALANCE },
+        vignette: { ...DEFAULT_VIGNETTE },
+        gradientMap: null, posterize: null, threshold: null, pixelate: null,
+        activeFilter: null, filterStrength: 50, cropRect: null,
+        rotation: 0, flippedH: false, flippedV: false, resizeTo: null, frame: defaultFrame(),
+        selection: null, selectFeather: 0, eyedropperActive: false, eyedropperColor: null,
+        activeTool: "adjust", zoom: 1, panX: 0, panY: 0, showBeforeAfter: false,
+        gridType: "none", showImageInfo: false,
+        exportFormat: "png", exportQuality: 0.92, exportWidth: width, exportHeight: height, exportLockAspect: true,
+        history: [], future: [],
+      });
+    } catch (err) {
+      console.error("Failed to load image:", err);
+      set({ open: false });
+    }
   },
 
   closeEditor: () => set({ open: false, displayCanvas: null }),
@@ -267,7 +278,10 @@ export const useImageEditorStore = create<ImageEditorState>()((set, get) => ({
   },
 
   setResizeTo: (v) => set({ resizeTo: v }),
-  applyFrameSettings: (s) => set((st) => ({ frame: { ...st.frame, ...s } })),
+  applyFrameSettings: (s) => {
+    set((st) => ({ frame: { ...st.frame, ...s } }));
+    get().reRender();
+  },
   setDrawTool: (t) => set({ drawTool: t }),
   setBrushSize: (s) => set({ brushSize: s }),
   setBrushColor: (c) => set({ brushColor: c }),
@@ -281,6 +295,7 @@ export const useImageEditorStore = create<ImageEditorState>()((set, get) => ({
   setTextFont: (f) => set({ textFont: f }),
   setTextSize: (s) => set({ textSize: s }),
   setCloneSrc: (x, y) => set({ cloneSrcX: x, cloneSrcY: y, cloneSampled: true }),
+  setBlendMode: (b) => set({ blendMode: b }),
 
   setSelection: (s) => set({ selection: s }),
   setSelectTool: (t) => set({ selectTool: t }),
@@ -297,6 +312,7 @@ export const useImageEditorStore = create<ImageEditorState>()((set, get) => ({
 
   setExportFormat: (f) => set({ exportFormat: f }),
   setExportQuality: (q) => set({ exportQuality: q }),
+  setExportLockAspect: (v) => set({ exportLockAspect: v }),
   setExportWidth: (w) => {
     const { exportLockAspect, originalWidth, originalHeight } = get();
     if (exportLockAspect && originalWidth > 0) {

@@ -22,6 +22,7 @@ export function ResizePanel() {
   const commitResize = useImageEditorStore((s) => s.commitResize);
   const setExportWidth = useImageEditorStore((s) => s.setExportWidth);
   const setExportHeight = useImageEditorStore((s) => s.setExportHeight);
+  const setExportLockAspect = useImageEditorStore((s) => s.setExportLockAspect);
 
   return (
     <div className="p-3 space-y-3 overflow-y-auto flex-1">
@@ -50,7 +51,7 @@ export function ResizePanel() {
 
       <label className="flex items-center gap-2 text-[11px] text-text-secondary cursor-pointer">
         <input type="checkbox" checked={exportLockAspect}
-          onChange={() => useImageEditorStore.getState().exportLockAspect = !exportLockAspect}
+          onChange={() => setExportLockAspect(!exportLockAspect)}
           className="accent-neon-cyan"
         />
         Maintain aspect ratio
@@ -64,13 +65,13 @@ export function ResizePanel() {
               key={p.label}
               onClick={() => {
                 if (p.h) {
+                  setExportLockAspect(false);
                   setExportWidth(p.w);
-                  useImageEditorStore.getState().exportLockAspect = false;
                   setExportHeight(p.h);
                 } else {
                   const ratio = originalHeight / originalWidth;
+                  setExportLockAspect(true);
                   setExportWidth(p.w);
-                  useImageEditorStore.getState().exportLockAspect = true;
                   setExportHeight(Math.round(p.w * ratio));
                 }
               }}

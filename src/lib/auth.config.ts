@@ -65,6 +65,17 @@ export const authOptions: NextAuthOptions = {
       if (session.user) { (session.user as any).role = (token as any).role; (session.user as any).id = token.id as string; }
       return session;
     },
+    async redirect({ url, baseUrl }) {
+      try {
+        const urlObj = new URL(url, baseUrl);
+        if (urlObj.origin === baseUrl || url.startsWith("/")) {
+          return url;
+        }
+      } catch {
+        // invalid url
+      }
+      return baseUrl;
+    },
   },
   pages: { signIn: "/auth/login" },
   session: { strategy: "jwt" },
