@@ -61,7 +61,7 @@ export function Navbar() {
           <a href="/auth/login">
             <Button variant="ghost" size="sm">Sign In</Button>
           </a>
-          <a href="/auth/login">
+          <a href="/auth/register">
             <Button variant="neon" size="sm">Try Free</Button>
           </a>
         </div>
@@ -96,7 +96,7 @@ export function Navbar() {
                 <a href="/auth/login" className="flex-1">
                   <Button variant="ghost" size="sm" className="w-full">Sign In</Button>
                 </a>
-                <a href="/auth/login" className="flex-1">
+                <a href="/auth/register" className="flex-1">
                   <Button variant="neon" size="sm" className="w-full">Try Free</Button>
                 </a>
               </div>

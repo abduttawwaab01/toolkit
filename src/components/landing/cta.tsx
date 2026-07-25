@@ -35,10 +35,12 @@ export function CTA() {
 
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
             transition={{ delay: 0.2 }} className="flex flex-col sm:flex-row items-center justify-center gap-4 relative z-10">
-            <Button variant="neon" size="xl" className="group">
-              <Sparkles size={18} /> Start Creating Free
-              <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
-            </Button>
+            <a href="/auth/register">
+              <Button variant="neon" size="xl" className="group">
+                <Sparkles size={18} /> Start Creating Free
+                <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+              </Button>
+            </a>
             <Button variant="ghost" size="xl">See Plans</Button>
           </motion.div>
 

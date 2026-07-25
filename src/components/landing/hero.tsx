@@ -237,9 +237,11 @@ export function Hero() {
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.8 }}
           className="mt-10 flex flex-col sm:flex-row items-center gap-4">
-          <Button variant="neon" size="xl" className="group">
-            <Play size={18} className="group-hover:translate-x-0.5 transition-transform" /> Start Editing Free
-          </Button>
+          <a href="/auth/register">
+            <Button variant="neon" size="xl" className="group">
+              <Play size={18} className="group-hover:translate-x-0.5 transition-transform" /> Start Editing Free
+            </Button>
+          </a>
           <Button variant="glass" size="xl">
             <Sparkles size={18} /> See AI in Action
           </Button>

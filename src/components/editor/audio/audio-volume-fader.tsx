@@ -28,15 +28,15 @@ export function AudioVolumeFader({
   const faderRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
+  const handleDragStart = useCallback(
+    (clientY: number) => {
       setDragging(true);
-      const startY = e.clientY;
+      const startY = clientY;
       const startVol = volume;
 
-      const handleMove = (ev: MouseEvent) => {
-        const dy = startY - ev.clientY;
+      const handleMove = (ev: MouseEvent | TouchEvent) => {
+        const currentY = "touches" in ev ? ev.touches[0].clientY : (ev as MouseEvent).clientY;
+        const dy = startY - currentY;
         const newVol = Math.max(0, Math.min(2, startVol + dy / 100));
         onChange(newVol);
       };
@@ -45,12 +45,31 @@ export function AudioVolumeFader({
         setDragging(false);
         document.removeEventListener("mousemove", handleMove);
         document.removeEventListener("mouseup", handleUp);
+        document.removeEventListener("touchmove", handleMove);
+        document.removeEventListener("touchend", handleUp);
       };
 
       document.addEventListener("mousemove", handleMove);
       document.addEventListener("mouseup", handleUp);
+      document.addEventListener("touchmove", handleMove, { passive: false });
+      document.addEventListener("touchend", handleUp);
     },
     [volume, onChange],
+  );
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      handleDragStart(e.clientY);
+    },
+    [handleDragStart],
+  );
+
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      handleDragStart(e.touches[0].clientY);
+    },
+    [handleDragStart],
   );
 
   const dbVolume = volume === 0 ? -Infinity : 20 * Math.log10(volume);
@@ -68,6 +87,7 @@ export function AudioVolumeFader({
         ref={faderRef}
         className="relative w-4 h-24 glass rounded-full cursor-pointer"
         onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
       >
         {/* Fill */}
         <div

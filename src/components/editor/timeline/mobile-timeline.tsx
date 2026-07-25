@@ -6,9 +6,10 @@ import { pixelToTime, timeToPixel, generateRulerMarkers } from "@/lib/timeline-u
 import { useTouch, type TouchGesture } from "@/components/ui/hooks/use-touch";
 
 export function MobileTimeline() {
-  const { clips, tracks, playhead, zoom, scrollLeft, setPlayhead, setZoom, setScrollLeft } = useEditorStore();
+  const { clips, tracks, playhead, zoom, scrollLeft, selectedClipId, setPlayhead, setZoom, setScrollLeft, moveClip, selectClip } = useEditorStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef({ startScroll: 0, startZoom: 100 });
+  const clipDragRef = useRef<{ clipId: string; startTime: number; startX: number } | null>(null);
 
   const handleGesture = useCallback((gesture: TouchGesture) => {
     switch (gesture.type) {
@@ -18,6 +19,7 @@ export function MobileTimeline() {
           const relX = gesture.x - rect.left + scrollLeft;
           const time = pixelToTime(relX, zoom, 0);
           setPlayhead(Math.max(0, time));
+          useEditorStore.getState().selectClip(null);
         }
         break;
       case "doubletap":
@@ -28,6 +30,12 @@ export function MobileTimeline() {
         break;
       case "swipe-right":
         setScrollLeft(Math.max(0, scrollLeft - 100));
+        break;
+      case "pinch-in":
+        setZoom(zoom / 1.2);
+        break;
+      case "pinch-out":
+        setZoom(zoom * 1.2);
         break;
     }
   }, [zoom, scrollLeft, setPlayhead, setScrollLeft]);
@@ -44,6 +52,31 @@ export function MobileTimeline() {
     },
     threshold: 10,
   });
+
+  const handleClipTouchStart = useCallback((e: React.TouchEvent, clipId: string) => {
+    e.stopPropagation();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip) return;
+    selectClip(clipId);
+    clipDragRef.current = {
+      clipId,
+      startTime: clip.startTime,
+      startX: e.touches[0].clientX,
+    };
+  }, [clips, selectClip]);
+
+  const handleClipTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!clipDragRef.current) return;
+    e.preventDefault();
+    const dx = e.touches[0].clientX - clipDragRef.current.startX;
+    const dt = pixelToTime(dx, zoom, 0);
+    const newTime = Math.max(0, clipDragRef.current.startTime + dt);
+    moveClip(clipDragRef.current.clipId, newTime);
+  }, [zoom, moveClip]);
+
+  const handleClipTouchEnd = useCallback(() => {
+    clipDragRef.current = null;
+  }, []);
 
   const totalDuration = useMemo(() => {
     const maxEnd = clips.reduce((max, c) => Math.max(max, c.startTime + c.duration), 0);
@@ -102,11 +135,12 @@ export function MobileTimeline() {
             const track = tracks.find((t) => t.id === clip.trackId);
             const trackIndex = tracks.indexOf(track!);
             if (trackIndex === -1) return null;
+            const isSelected = clip.id === selectedClipId;
 
             return (
               <div
                 key={clip.id}
-                className="absolute rounded-md flex items-center px-1.5 overflow-hidden cursor-pointer active:opacity-80 transition-opacity"
+                className={`absolute rounded-md flex items-center px-1.5 overflow-hidden cursor-pointer active:opacity-80 transition-opacity ${isSelected ? "ring-2 ring-neon-cyan" : ""}`}
                 style={{
                   left: timeToPixel(clip.startTime, zoom, 0),
                   width: Math.max(timeToPixel(clip.duration, zoom, 0), 4),
@@ -116,8 +150,11 @@ export function MobileTimeline() {
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  useEditorStore.getState().selectClip(clip.id);
+                  selectClip(clip.id);
                 }}
+                onTouchStart={(e) => handleClipTouchStart(e, clip.id)}
+                onTouchMove={handleClipTouchMove}
+                onTouchEnd={handleClipTouchEnd}
               >
                 <span className="text-[8px] text-white font-medium truncate drop-shadow-md">{clip.name}</span>
               </div>
