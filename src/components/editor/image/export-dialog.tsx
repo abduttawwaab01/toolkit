@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useImageEditorStore } from "@/lib/image-editor-store";
-import { canvasToBlob, dataUrlFromCanvas } from "@/lib/image/editor";
+import { canvasToBlob } from "@/lib/image/editor";
 import { EXPORT_FORMATS } from "@/types/image-editor";
 import { useExportCredits } from "@/hooks/use-export-credits";
 import { CreditSpendDialog } from "@/components/credits/credit-spend-dialog";
