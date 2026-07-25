@@ -1,0 +1,300 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String   @id @default(uuid())
+  email          String?  @unique
+  passwordHash   String?
+  name           String?
+  image          String?
+  role           String   @default("GUEST")
+  creditsBalance Int      @default(5)
+  storageUsed    BigInt   @default(0)
+  storageLimit   BigInt   @default(1073741824)
+  maxProjects    Int?
+  isSuspended    Boolean  @default(false)
+  suspendedReason String?
+  adminNotes     String?
+  lastLoginIp    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lastActiveAt   DateTime @default(now())
+
+  projects     Project[]
+  files        ProjectFile[]
+  aiUsageLogs  AiUsageLog[]
+  subscription Subscription?
+  documents    Document[]
+  purchaseRequests CreditPurchaseRequest[]
+  creditSpends    CreditSpendLog[]
+}
+
+model Subscription {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  plan                 String   @default("FREE")
+  status               String   @default("ACTIVE")
+  periodStart          DateTime @default(now())
+  periodEnd            DateTime
+  creditsMonthly       Int      @default(5)
+  creditsUsedThisMonth Int      @default(0)
+  stripeCustomerId     String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Project {
+  id           String   @id @default(uuid())
+  userId       String
+  name         String
+  description  String?
+  type         String   @default("video")
+  status       String   @default("DRAFT")
+  size         BigInt   @default(0)
+  thumbnailUrl String?
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files ProjectFile[]
+}
+
+model ProjectFile {
+  id           String    @id @default(uuid())
+  projectId    String?
+  userId       String
+  category     String    @default("RAW")
+  storagePath  String
+  originalName String
+  mimeType     String
+  size         BigInt
+  width        Int?
+  height       Int?
+  duration     Float?
+  autoDeleteAt DateTime?
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AutoDeleteConfig {
+  id                String   @id @default(uuid())
+  role              String   @unique
+  tempTtlHours      Int      @default(1)
+  processedTtlHours Int      @default(24)
+  exportTtlHours    Int      @default(168)
+  enabled           Boolean  @default(true)
+  updatedAt         DateTime @updatedAt
+}
+
+model RateLimitRule {
+  id                String   @id @default(uuid())
+  role              String   @unique
+  requestsPerMinute Int      @default(60)
+  requestsPerHour   Int      @default(1000)
+  concurrentJobs    Int      @default(3)
+  maxFileSize       BigInt   @default(524288000)
+  maxStoragePerUser BigInt   @default(1073741824)
+  maxProjects       Int      @default(10)
+  maxDurationMinutes Int     @default(60)
+  maxResolution     String   @default("1080p")
+  exportQuality     String   @default("high")
+  exportWatermark   Boolean  @default(false)
+  aiCreditsPerDay   Int      @default(10)
+  allowedMimeTypes  String?
+  maxDocuments      Int      @default(50)
+  maxDocumentSizeKB Int      @default(5120)
+  allowedDocFormats String   @default("[\"txt\",\"md\",\"html\",\"pdf\",\"docx\",\"rtf\"]")
+  updatedAt         DateTime @updatedAt
+}
+
+model FeatureToggle {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  label     String
+  enabled   Boolean  @default(false)
+  roles     String   @default("[\"ADMIN\"]")
+  updatedAt DateTime @updatedAt
+}
+
+model AiUsageLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  feature    String
+  provider   String
+  modelName  String?
+  tokensUsed Int?
+  cost       Float    @default(0)
+  durationMs Int?
+  success    Boolean  @default(true)
+  errorMsg   String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+}
+
+model Announcement {
+  id        String   @id @default(uuid())
+  title     String
+  content   String
+  severity  String   @default("info")
+  isActive  Boolean  @default(true)
+  startsAt  DateTime @default(now())
+  endsAt    DateTime?
+  createdAt DateTime @default(now())
+}
+
+model PlatformSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  label     String
+  category  String   @default("general")
+  type      String   @default("string")
+  updatedAt DateTime @updatedAt
+}
+
+model Document {
+  id          String   @id @default(uuid())
+  userId      String
+  title       String
+  description String?
+  content     Json     @default("{}")
+  format      String   @default("rich")
+  mimeType    String   @default("text/html")
+  extension   String   @default("html")
+  size        BigInt   @default(0)
+  wordCount   Int      @default(0)
+  isArchived  Boolean  @default(false)
+  isTemplate  Boolean  @default(false)
+  templateId  String?
+  tags        String   @default("[]")
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastOpenedAt DateTime?
+
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions DocumentVersion[]
+}
+
+model DocumentVersion {
+  id         String   @id @default(uuid())
+  documentId String
+  version    Int      @default(1)
+  content    Json     @default("{}")
+  title      String
+  size       BigInt   @default(0)
+  wordCount  Int      @default(0)
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+model DocumentTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  category    String   @default("general")
+  content     Json     @default("{}")
+  format      String   @default("rich")
+  thumbnail   String?
+  isPublic    Boolean  @default(true)
+  usageCount  Int      @default(0)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model BankDetail {
+  id          String   @id @default(uuid())
+  accountName String
+  accountNo   String
+  bankName    String
+  isActive    Boolean  @default(true)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CreditPackage {
+  id            String   @id @default(uuid())
+  name          String
+  credits       Int
+  priceNaira    Int
+  bonusCredits  Int      @default(0)
+  description   String?
+  isActive      Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  requests CreditPurchaseRequest[]
+}
+
+model CreditPurchaseRequest {
+  id            String   @id @default(uuid())
+  userId        String
+  packageId     String?
+  credits       Int
+  amountNaira   Int
+  accountName   String
+  accountNo     String?
+  bankName      String?
+  reference     String?
+  status        String   @default("PENDING")
+  adminNotes    String?
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  package CreditPackage?  @relation(fields: [packageId], references: [id], onDelete: SetNull)
+}
+
+model FeatureCreditCost {
+  id           String   @id @default(uuid())
+  featureKey   String   @unique
+  featureLabel String
+  creditsCost  Int      @default(1)
+  isEnabled    Boolean  @default(true)
+  description  String?
+  updatedAt    DateTime @updatedAt
+}
+
+model CreditSpendLog {
+  id        String   @id @default(uuid())
+  userId    String
+  feature   String
+  credits   Int
+  reason    String?
+  balance   Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
