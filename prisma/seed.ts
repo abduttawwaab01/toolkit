@@ -24,40 +24,35 @@ async function main() {
       },
     });
 
-    const limits: Record<string, any> = {
-      GUEST: {
-        requestsPerMinute: 10, requestsPerHour: 100, concurrentJobs: 1,
-        maxFileSize: BigInt(104857600), maxStoragePerUser: BigInt(104857600),
-        maxProjects: 2, maxDurationMinutes: 10, maxResolution: "720p",
-        exportQuality: "standard", exportWatermark: true, aiCreditsPerDay: 3,
-        maxDocuments: 5, maxDocumentSizeKB: 1024,
-        allowedDocFormats: '["txt","md","html"]',
-        freeExportsPerDay: 1, freeExportsPerWeek: 3, freeExportsPerMonth: 5, freeExportsPerYear: 30,
-        creditsPerExport: 2, creditsPerMinute: 2,
-      },
-      USER: {
-        requestsPerMinute: 60, requestsPerHour: 1000, concurrentJobs: 3,
-        maxFileSize: BigInt(524288000), maxStoragePerUser: BigInt(1073741824),
-        maxProjects: 25, maxDurationMinutes: 60, maxResolution: "1080p",
-        exportQuality: "high", exportWatermark: false, aiCreditsPerDay: 10,
-        maxDocuments: 50, maxDocumentSizeKB: 5120,
-        allowedDocFormats: '["txt","md","html","pdf","docx","rtf"]',
-        freeExportsPerDay: 3, freeExportsPerWeek: 15, freeExportsPerMonth: 50, freeExportsPerYear: 500,
-        creditsPerExport: 1, creditsPerMinute: 1,
-      },
-      ADMIN: {
-        requestsPerMinute: 1000, requestsPerHour: 50000, concurrentJobs: 100,
-        maxFileSize: BigInt("10737418240"), maxStoragePerUser: BigInt("1099511627776"),
-        maxProjects: 9999, maxDurationMinutes: 9999, maxResolution: "8K",
-        exportQuality: "lossless", exportWatermark: false, aiCreditsPerDay: 1000,
-        maxDocuments: 99999, maxDocumentSizeKB: 102400,
-        allowedDocFormats: '["txt","md","html","pdf","docx","rtf"]',
-        freeExportsPerDay: 9999, freeExportsPerWeek: 9999, freeExportsPerMonth: 9999, freeExportsPerYear: 9999,
-        creditsPerExport: 0, creditsPerMinute: 0,
-      },
+    const exportLimits: Record<string, Record<string, number>> = {
+      GUEST: { freePerDay: 1, freePerWeek: 3, freePerMonth: 5, freePerYear: 30, creditsPerExport: 2, creditsPerMinute: 2 },
+      USER: { freePerDay: 3, freePerWeek: 15, freePerMonth: 50, freePerYear: 500, creditsPerExport: 1, creditsPerMinute: 1 },
+      ADMIN: { freePerDay: 9999, freePerWeek: 9999, freePerMonth: 9999, freePerYear: 9999, creditsPerExport: 0, creditsPerMinute: 0 },
     };
+    const docLimits: Record<string, Record<string, any>> = {
+      GUEST: { maxDocuments: 5, maxDocumentSizeKB: 1024, allowedDocFormats: '["txt","md","html"]' },
+      USER: { maxDocuments: 50, maxDocumentSizeKB: 5120, allowedDocFormats: '["txt","md","html","pdf","docx","rtf"]' },
+      ADMIN: { maxDocuments: 99999, maxDocumentSizeKB: 102400, allowedDocFormats: '["txt","md","html","pdf","docx","rtf"]' },
+    };
+    const exportLabels: Record<string, string> = { freePerDay: "Free Exports Per Day", freePerWeek: "Free Exports Per Week", freePerMonth: "Free Exports Per Month", freePerYear: "Free Exports Per Year", creditsPerExport: "Credits Per Export", creditsPerMinute: "Credits Per Minute" };
+    const docLabels: Record<string, string> = { maxDocuments: "Max Documents", maxDocumentSizeKB: "Max Document Size (KB)", allowedDocFormats: "Allowed Document Formats" };
 
-    await prisma.rateLimitRule.upsert({ where: { role }, update: {}, create: { role, ...limits[role] } });
+    for (const [field, value] of Object.entries(exportLimits[role])) {
+      const key = `export_limit_${role}_${field}`;
+      await prisma.platformSetting.upsert({
+        where: { key },
+        update: { value: String(value) },
+        create: { key, value: String(value), label: `${role} - ${exportLabels[field]}`, category: "export-limits", type: "number" },
+      });
+    }
+    for (const [field, value] of Object.entries(docLimits[role])) {
+      const key = `doc_limit_${role}_${field}`;
+      await prisma.platformSetting.upsert({
+        where: { key },
+        update: { value: String(value) },
+        create: { key, value: String(value), label: `${role} - ${docLabels[field]}`, category: "documents", type: field === "allowedDocFormats" ? "string" : "number" },
+      });
+    }
   }
 
   const features = [
@@ -110,7 +105,7 @@ async function main() {
     });
   }
 
-  console.log("✅ Seeded: admin user, auto-delete configs, rate limits, feature toggles, bank details, credit packages.");
+  console.log("✅ Seeded: admin user, auto-delete configs, export limits, document settings, feature toggles, bank details, credit packages.");
   console.log(`   Admin: admin@skoolar.org / successor`);
 }
 

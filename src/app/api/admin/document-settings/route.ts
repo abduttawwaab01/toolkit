@@ -11,13 +11,38 @@ const DOCUMENT_PLATFORM_KEYS = [
   "documentMaxVersions",
 ];
 
+const DOC_PER_ROLE_KEYS = ["maxDocuments", "maxDocumentSizeKB", "allowedDocFormats"];
+
+function roleDocKey(role: string, field: string) {
+  return `doc_limit_${role}_${field}`;
+}
+
 export async function GET(req: NextRequest) {
   const admin = await requireAdmin();
   if (!admin) return jsonResponse({ error: "Forbidden" }, { status: 403 });
 
-  const rules = await db.rateLimitRule.findMany({
-    select: { role: true, maxDocuments: true, maxDocumentSizeKB: true, allowedDocFormats: true },
-  });
+  const roleSettings = await Promise.all(
+    ["GUEST", "USER", "ADMIN"].map(async (role) => {
+      const getInt = async (field: string, fallback: number) => {
+        try {
+          const s = await db.platformSetting.findUnique({ where: { key: roleDocKey(role, field) } });
+          return s ? parseInt(s.value, 10) || fallback : fallback;
+        } catch { return fallback; }
+      };
+      const getStr = async (field: string, fallback: string) => {
+        try {
+          const s = await db.platformSetting.findUnique({ where: { key: roleDocKey(role, field) } });
+          return s ? s.value : fallback;
+        } catch { return fallback; }
+      };
+      return {
+        role,
+        maxDocuments: await getInt("maxDocuments", role === "GUEST" ? 5 : role === "ADMIN" ? 99999 : 50),
+        maxDocumentSizeKB: await getInt("maxDocumentSizeKB", role === "GUEST" ? 1024 : role === "ADMIN" ? 102400 : 5120),
+        allowedDocFormats: parseJsonArray(await getStr("allowedDocFormats", '["txt","md","html","pdf","docx","rtf"]')),
+      };
+    })
+  );
 
   const settings = await db.platformSetting.findMany({
     where: { key: { in: DOCUMENT_PLATFORM_KEYS } },
@@ -27,12 +52,7 @@ export async function GET(req: NextRequest) {
   for (const s of settings) settingsMap[s.key] = s.value;
 
   return jsonResponse({
-    roleSettings: rules.map((r) => ({
-      role: r.role,
-      maxDocuments: r.maxDocuments,
-      maxDocumentSizeKB: r.maxDocumentSizeKB,
-      allowedDocFormats: parseJsonArray(r.allowedDocFormats),
-    })),
+    roleSettings,
     globalSettings: {
       enableDocumentFeature: settingsMap["documentFeatureEnabled"] !== "false",
       enableConversions: settingsMap["documentConversionsEnabled"] !== "false",
@@ -53,16 +73,34 @@ export async function PUT(req: NextRequest) {
   if (Array.isArray(roleSettings)) {
     for (const rs of roleSettings) {
       if (!rs.role) continue;
-      const updateData: Record<string, any> = {};
-      if (rs.maxDocuments !== undefined) updateData.maxDocuments = Math.max(0, Math.min(99999, Number(rs.maxDocuments)));
-      if (rs.maxDocumentSizeKB !== undefined) updateData.maxDocumentSizeKB = Math.max(0, Math.min(999999, Number(rs.maxDocumentSizeKB)));
-      if (rs.allowedDocFormats !== undefined) updateData.allowedDocFormats = JSON.stringify(rs.allowedDocFormats);
-
-      if (Object.keys(updateData).length > 0) {
-        await db.rateLimitRule.upsert({
-          where: { role: rs.role },
-          update: updateData,
-          create: { role: rs.role, ...updateData },
+      const labels: Record<string, string> = {
+        maxDocuments: "Max Documents",
+        maxDocumentSizeKB: "Max Document Size (KB)",
+        allowedDocFormats: "Allowed Document Formats",
+      };
+      if (rs.maxDocuments !== undefined) {
+        const key = roleDocKey(rs.role, "maxDocuments");
+        await db.platformSetting.upsert({
+          where: { key },
+          update: { value: String(Math.max(0, Math.min(99999, Number(rs.maxDocuments)))) },
+          create: { key, value: String(Math.max(0, Math.min(99999, Number(rs.maxDocuments)))), label: `${rs.role} - ${labels.maxDocuments}`, category: "documents", type: "number" },
+        });
+      }
+      if (rs.maxDocumentSizeKB !== undefined) {
+        const key = roleDocKey(rs.role, "maxDocumentSizeKB");
+        await db.platformSetting.upsert({
+          where: { key },
+          update: { value: String(Math.max(0, Math.min(999999, Number(rs.maxDocumentSizeKB)))) },
+          create: { key, value: String(Math.max(0, Math.min(999999, Number(rs.maxDocumentSizeKB)))), label: `${rs.role} - ${labels.maxDocumentSizeKB}`, category: "documents", type: "number" },
+        });
+      }
+      if (rs.allowedDocFormats !== undefined) {
+        const key = roleDocKey(rs.role, "allowedDocFormats");
+        const val = JSON.stringify(rs.allowedDocFormats);
+        await db.platformSetting.upsert({
+          where: { key },
+          update: { value: val },
+          create: { key, value: val, label: `${rs.role} - ${labels.allowedDocFormats}`, category: "documents", type: "string" },
         });
       }
     }

@@ -98,33 +98,6 @@ model AutoDeleteConfig {
   updatedAt         DateTime @updatedAt
 }
 
-model RateLimitRule {
-  id                String   @id @default(uuid())
-  role              String   @unique
-  requestsPerMinute Int      @default(60)
-  requestsPerHour   Int      @default(1000)
-  concurrentJobs    Int      @default(3)
-  maxFileSize       BigInt   @default(524288000)
-  maxStoragePerUser BigInt   @default(1073741824)
-  maxProjects       Int      @default(10)
-  maxDurationMinutes Int     @default(60)
-  maxResolution     String   @default("1080p")
-  exportQuality     String   @default("high")
-  exportWatermark   Boolean  @default(false)
-  aiCreditsPerDay   Int      @default(10)
-  allowedMimeTypes  String?
-  maxDocuments      Int      @default(50)
-  maxDocumentSizeKB Int      @default(5120)
-  allowedDocFormats String   @default("[\"txt\",\"md\",\"html\",\"pdf\",\"docx\",\"rtf\"]")
-  freeExportsPerDay   Int    @default(3)
-  freeExportsPerWeek  Int    @default(15)
-  freeExportsPerMonth Int    @default(50)
-  freeExportsPerYear  Int    @default(500)
-  creditsPerExport    Int    @default(1)
-  creditsPerMinute    Int    @default(1)
-  updatedAt         DateTime @updatedAt
-}
-
 model FeatureToggle {
   id        String   @id @default(uuid())
   key       String   @unique

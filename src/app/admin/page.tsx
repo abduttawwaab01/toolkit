@@ -2,10 +2,9 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { BarChart3, Users, Gauge, Clock, Puzzle, Settings, ScrollText, Megaphone, FileText, CreditCard } from "lucide-react";
+import { BarChart3, Users, Clock, Puzzle, Settings, ScrollText, Megaphone, FileText, CreditCard } from "lucide-react";
 import { AdminOverview } from "@/components/admin/admin-overview";
 import { AdminUsers } from "@/components/admin/admin-users";
-import { AdminRateLimits } from "@/components/admin/admin-rate-limits";
 import { AdminStorageConfig } from "@/components/admin/admin-storage-config";
 import { AdminFeatures } from "@/components/admin/admin-features";
 import { AdminPlatformSettings } from "@/components/admin/admin-platform-settings";
@@ -17,7 +16,6 @@ import { AdminCredits } from "@/components/admin/admin-credits";
 const tabs = [
   { id: "overview", label: "Overview", icon: BarChart3 },
   { id: "users", label: "Users", icon: Users },
-  { id: "rate-limits", label: "Rate Limits", icon: Gauge },
   { id: "storage", label: "Storage & Files", icon: Clock },
   { id: "features", label: "Features", icon: Puzzle },
   { id: "platform", label: "Platform", icon: Settings },
@@ -34,7 +32,6 @@ export default function AdminPage() {
     switch (activeTab) {
       case "overview": return <AdminOverview />;
       case "users": return <AdminUsers />;
-      case "rate-limits": return <AdminRateLimits />;
       case "storage": return <AdminStorageConfig />;
       case "features": return <AdminFeatures />;
       case "platform": return <AdminPlatformSettings />;

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { aiRouter } from "@/lib/ai-router";
 import { db } from "@/lib/db";
-import { checkAiCredits, incrementAiUsage } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,10 +10,6 @@ export async function POST(req: NextRequest) {
     if (!feature) return NextResponse.json({ error: "Feature is required" }, { status: 400 });
 
     if (userId) {
-      const credits = await checkAiCredits(userId);
-      if (!credits.hasCredits) {
-        return NextResponse.json({ error: "Daily AI credit limit reached. Upgrade your plan." }, { status: 429 });
-      }
       const user = await db.user.findUnique({ where: { id: userId } });
       if (!user || user.creditsBalance <= 0) {
         return NextResponse.json({ error: "Insufficient AI credits" }, { status: 402 });
@@ -51,7 +46,6 @@ export async function POST(req: NextRequest) {
 
     if (userId) {
       await db.user.update({ where: { id: userId }, data: { creditsBalance: { decrement: 1 } } });
-      await incrementAiUsage(userId);
     }
 
     await db.aiUsageLog.create({

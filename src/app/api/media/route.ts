@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSignedDownloadUrl, getPublicUrl } from "@/lib/r2";
+import { maybeRunCleanup } from "@/lib/cleanup";
 
 /** GET /api/media — list user's media files */
 export async function GET(req: NextRequest) {
@@ -40,6 +41,9 @@ export async function GET(req: NextRequest) {
   const filtered = search
     ? items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()))
     : items;
+
+  // Trigger cleanup check (runs at most every 5 min)
+  await maybeRunCleanup();
 
   return NextResponse.json({ items: filtered, total: filtered.length });
 }

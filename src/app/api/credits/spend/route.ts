@@ -3,7 +3,6 @@ import { authOptions } from "@/lib/auth.config";
 import { jsonResponse } from "@/lib/json";
 import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
-import { redis } from "@/lib/redis";
 
 const prisma = new PrismaClient();
 
@@ -11,75 +10,63 @@ const spendSchema = z.object({
   durationMinutes: z.number().min(0).default(0),
 });
 
-async function checkExportLimits(userId: string, role: string) {
-  const rule = await prisma.rateLimitRule.findUnique({ where: { role } });
-  if (!rule) return { withinFreeLimit: true };
-
-  const now = new Date();
-
-  // Check daily
-  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const dailyKey = `export:daily:${userId}`;
-  const dailyUsed = (await redis.get<number>(dailyKey)) ?? 0;
-  if (dailyUsed < rule.freeExportsPerDay) return { withinFreeLimit: true };
-
-  // Check weekly (Monday-based)
-  const weekStart = new Date(dayStart);
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
-  const weeklyKey = `export:weekly:${userId}`;
-  const weeklyUsed = (await redis.get<number>(weeklyKey)) ?? 0;
-  if (weeklyUsed < rule.freeExportsPerWeek) return { withinFreeLimit: true };
-
-  // Check monthly
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthlyKey = `export:monthly:${userId}`;
-  const monthlyUsed = (await redis.get<number>(monthlyKey)) ?? 0;
-  if (monthlyUsed < rule.freeExportsPerMonth) return { withinFreeLimit: true };
-
-  // Check yearly
-  const yearStart = new Date(now.getFullYear(), 0, 1);
-  const yearlyKey = `export:yearly:${userId}`;
-  const yearlyUsed = (await redis.get<number>(yearlyKey)) ?? 0;
-  if (yearlyUsed < rule.freeExportsPerYear) return { withinFreeLimit: true };
-
-  // All free limits exhausted — calculate credit cost
-  const creditsNeeded = rule.creditsPerExport + Math.ceil(rule.creditsPerMinute * Math.max(0, Math.ceil(1)));
+async function getExportLimits(role: string) {
+  const getInt = async (key: string, fallback: number) => {
+    try {
+      const s = await prisma.platformSetting.findUnique({ where: { key } });
+      return s ? parseInt(s.value, 10) || fallback : fallback;
+    } catch { return fallback; }
+  };
   return {
-    withinFreeLimit: false,
-    creditsNeeded: rule.creditsPerExport + Math.ceil(rule.creditsPerMinute * 1),
-    creditsPerExport: rule.creditsPerExport,
-    creditsPerMinute: rule.creditsPerMinute,
-    dailyRemaining: Math.max(0, rule.freeExportsPerDay - dailyUsed),
-    weeklyRemaining: Math.max(0, rule.freeExportsPerWeek - weeklyUsed),
-    monthlyRemaining: Math.max(0, rule.freeExportsPerMonth - monthlyUsed),
-    yearlyRemaining: Math.max(0, rule.freeExportsPerYear - yearlyUsed),
+    freeExportsPerDay: await getInt(`export_limit_${role}_freePerDay`, role === "GUEST" ? 1 : role === "ADMIN" ? 9999 : 3),
+    freeExportsPerWeek: await getInt(`export_limit_${role}_freePerWeek`, role === "GUEST" ? 3 : role === "ADMIN" ? 9999 : 15),
+    freeExportsPerMonth: await getInt(`export_limit_${role}_freePerMonth`, role === "GUEST" ? 5 : role === "ADMIN" ? 9999 : 50),
+    freeExportsPerYear: await getInt(`export_limit_${role}_freePerYear`, role === "GUEST" ? 30 : role === "ADMIN" ? 9999 : 500),
+    creditsPerExport: await getInt(`export_limit_${role}_creditsPerExport`, role === "ADMIN" ? 0 : 1),
+    creditsPerMinute: await getInt(`export_limit_${role}_creditsPerMinute`, role === "ADMIN" ? 0 : 1),
   };
 }
 
-async function incrementExportCounters(userId: string) {
+async function countExportsSince(userId: string, since: Date): Promise<number> {
+  try {
+    return await prisma.creditSpendLog.count({
+      where: { userId, feature: "export", createdAt: { gte: since } },
+    });
+  } catch { return 0; }
+}
+
+async function checkExportLimits(userId: string, role: string) {
+  const limits = await getExportLimits(role);
   const now = new Date();
+
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const weekStart = new Date(dayStart);
   weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const yearStart = new Date(now.getFullYear(), 0, 1);
 
-  const dayTTL = Math.floor((86400000 - (now.getTime() - dayStart.getTime())) / 1000);
-  const weekTTL = Math.floor((7 * 86400000 - (now.getTime() - weekStart.getTime())) / 1000);
-  const monthTTL = Math.floor((31 * 86400000 - (now.getTime() - monthStart.getTime())) / 1000);
-  const yearTTL = Math.floor((366 * 86400000 - (now.getTime() - yearStart.getTime())) / 1000);
-
-  const dailyKey = `export:daily:${userId}`;
-  const weeklyKey = `export:weekly:${userId}`;
-  const monthlyKey = `export:monthly:${userId}`;
-  const yearlyKey = `export:yearly:${userId}`;
-
-  await Promise.all([
-    redis.incr(dailyKey).then(() => redis.expire(dailyKey, Math.max(60, dayTTL))),
-    redis.incr(weeklyKey).then(() => redis.expire(weeklyKey, Math.max(60, weekTTL))),
-    redis.incr(monthlyKey).then(() => redis.expire(monthlyKey, Math.max(60, monthTTL))),
-    redis.incr(yearlyKey).then(() => redis.expire(yearlyKey, Math.max(60, yearTTL))),
+  const [dailyUsed, weeklyUsed, monthlyUsed, yearlyUsed] = await Promise.all([
+    countExportsSince(userId, dayStart),
+    countExportsSince(userId, weekStart),
+    countExportsSince(userId, monthStart),
+    countExportsSince(userId, yearStart),
   ]);
+
+  if (dailyUsed < limits.freeExportsPerDay) return { withinFreeLimit: true };
+  if (weeklyUsed < limits.freeExportsPerWeek) return { withinFreeLimit: true };
+  if (monthlyUsed < limits.freeExportsPerMonth) return { withinFreeLimit: true };
+  if (yearlyUsed < limits.freeExportsPerYear) return { withinFreeLimit: true };
+
+  return {
+    withinFreeLimit: false,
+    creditsNeeded: limits.creditsPerExport + Math.ceil(limits.creditsPerMinute * 1),
+    creditsPerExport: limits.creditsPerExport,
+    creditsPerMinute: limits.creditsPerMinute,
+    dailyRemaining: Math.max(0, limits.freeExportsPerDay - dailyUsed),
+    weeklyRemaining: Math.max(0, limits.freeExportsPerWeek - weeklyUsed),
+    monthlyRemaining: Math.max(0, limits.freeExportsPerMonth - monthlyUsed),
+    yearlyRemaining: Math.max(0, limits.freeExportsPerYear - yearlyUsed),
+  };
 }
 
 export async function POST(request: Request) {
@@ -99,24 +86,18 @@ export async function POST(request: Request) {
 
     const { durationMinutes } = parsed.data;
     const role = userRole || "GUEST";
-
     const limits = await checkExportLimits(userId, role);
 
     if (limits.withinFreeLimit) {
-      // Free export — just increment counters
-      await incrementExportCounters(userId);
-      return jsonResponse({
-        success: true,
-        free: true,
-        message: "Free export used",
+      await prisma.creditSpendLog.create({
+        data: { userId, feature: "export", credits: 0, reason: "Free export", balance: 0 },
       });
+      return jsonResponse({ success: true, free: true, message: "Free export used" });
     }
 
-    // Calculate credits needed based on duration
-    const rule = await prisma.rateLimitRule.findUnique({ where: { role } });
-    const creditsNeeded = (rule?.creditsPerExport || 1) + Math.ceil((rule?.creditsPerMinute || 1) * Math.max(1, Math.ceil(durationMinutes)));
+    const exportLimits = await getExportLimits(role);
+    const creditsNeeded = exportLimits.creditsPerExport + Math.ceil(exportLimits.creditsPerMinute * Math.max(1, Math.ceil(durationMinutes)));
 
-    // Check user balance
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user || user.creditsBalance < creditsNeeded) {
       return jsonResponse({
@@ -128,7 +109,6 @@ export async function POST(request: Request) {
       }, { status: 402 });
     }
 
-    // Atomic: decrement credits + increment export counters
     const updated = await prisma.user.updateMany({
       where: { id: userId, creditsBalance: { gte: creditsNeeded } },
       data: { creditsBalance: { decrement: creditsNeeded } },
@@ -138,9 +118,6 @@ export async function POST(request: Request) {
       return jsonResponse({ success: false, error: "Insufficient credits (race condition)" }, { status: 402 });
     }
 
-    await incrementExportCounters(userId);
-
-    // Log the spend
     await prisma.creditSpendLog.create({
       data: {
         userId,
