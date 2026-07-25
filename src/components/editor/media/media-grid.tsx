@@ -11,6 +11,7 @@ import type { MediaItem as MediaItemType } from "@/types/media";
 interface MediaGridProps {
   userId?: string;
   onAddToTimeline?: (item: MediaItemType) => void;
+  onEditImage?: (url: string) => void;
 }
 
 /**
@@ -22,7 +23,7 @@ interface MediaGridProps {
  * - Delete items
  * - Drag items to timeline
  */
-export function MediaGrid({ userId, onAddToTimeline }: MediaGridProps) {
+export function MediaGrid({ userId, onAddToTimeline, onEditImage }: MediaGridProps) {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const { items, loading, error, search, setSearch, refresh, deleteItem } = useMediaLibrary({
@@ -146,6 +147,7 @@ export function MediaGrid({ userId, onAddToTimeline }: MediaGridProps) {
                 onDelete={handleDelete}
                 onSelect={setSelectedItem}
                 onAddToTimeline={onAddToTimeline}
+                onEditImage={onEditImage}
               />
             ))}
           </div>

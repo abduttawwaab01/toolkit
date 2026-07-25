@@ -10,6 +10,7 @@ interface MediaItemProps {
   onDelete?: (id: string) => void;
   onSelect?: (item: MediaItemType) => void;
   onAddToTimeline?: (item: MediaItemType) => void;
+  onEditImage?: (url: string) => void;
 }
 
 /**
@@ -18,7 +19,7 @@ interface MediaItemProps {
  * Drag-to-timeline: sets drag data with the item JSON.
  * Right-click context menu via buttons (mobile-friendly).
  */
-export function MediaItem({ item, onDelete, onSelect, onAddToTimeline }: MediaItemProps) {
+export function MediaItem({ item, onDelete, onSelect, onAddToTimeline, onEditImage }: MediaItemProps) {
   const [imgError, setImgError] = useState(false);
   const dragRef = useRef<HTMLDivElement>(null);
 
@@ -105,13 +106,21 @@ export function MediaItem({ item, onDelete, onSelect, onAddToTimeline }: MediaIt
         </div>
 
         {/* Hover actions */}
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
           <button
             onClick={(e) => { e.stopPropagation(); onAddToTimeline?.(item); }}
-            className="glass rounded-lg px-2.5 py-1.5 text-[10px] text-text-primary hover:bg-glass-heavy transition-colors"
+            className="glass rounded-lg px-2 py-1.5 text-[10px] text-text-primary hover:bg-glass-heavy transition-colors"
           >
             + Timeline
           </button>
+          {item.type === "image" && onEditImage && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onEditImage(item.url); }}
+              className="glass rounded-lg px-2 py-1.5 text-[10px] text-neon-cyan hover:bg-glass-heavy transition-colors"
+            >
+              Edit
+            </button>
+          )}
           <button
             onClick={(e) => { e.stopPropagation(); onDelete?.(item.id); }}
             className="glass rounded-lg p-1.5 text-neon-pink hover:bg-glass-heavy transition-colors"

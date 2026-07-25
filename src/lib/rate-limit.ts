@@ -156,66 +156,14 @@ export async function getAllPlatformSettings(): Promise<Record<string, string>> 
 }
 
 /**
- * Get credit cost for a specific feature.
+ * Get export credit costs for a role.
  */
-export async function getFeatureCreditCost(featureKey: string): Promise<{ creditsCost: number; isEnabled: boolean } | null> {
+export async function getExportCreditCosts(role: string): Promise<{ creditsPerExport: number; creditsPerMinute: number }> {
   try {
-    const cost = await db.featureCreditCost.findUnique({ where: { featureKey } });
-    if (cost) return { creditsCost: cost.creditsCost, isEnabled: cost.isEnabled };
+    const rule = await db.rateLimitRule.findUnique({ where: { role } });
+    if (rule) return { creditsPerExport: rule.creditsPerExport, creditsPerMinute: rule.creditsPerMinute };
   } catch {
     // DB may not be available
   }
-  return null;
-}
-
-/**
- * Spend credits to bypass a rate limit.
- * Returns true if credits were successfully deducted.
- */
-export async function spendCreditsForBypass(
-  userId: string,
-  feature: string,
-): Promise<{ success: boolean; newBalance: number; error?: string }> {
-  try {
-    const featureCost = await getFeatureCreditCost(feature);
-    if (!featureCost || !featureCost.isEnabled) {
-      return { success: false, newBalance: 0, error: "Feature not available for credit bypass" };
-    }
-
-    const user = await db.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      return { success: false, newBalance: 0, error: "User not found" };
-    }
-
-    if (user.creditsBalance < featureCost.creditsCost) {
-      return { success: false, newBalance: user.creditsBalance, error: "Insufficient credits" };
-    }
-
-    // Atomic decrement
-    const updated = await db.user.updateMany({
-      where: { id: userId, creditsBalance: { gte: featureCost.creditsCost } },
-      data: { creditsBalance: { decrement: featureCost.creditsCost } },
-    });
-
-    if (updated.count === 0) {
-      return { success: false, newBalance: 0, error: "Insufficient credits (race condition)" };
-    }
-
-    const newBalance = user.creditsBalance - featureCost.creditsCost;
-
-    // Log the spend
-    await db.creditSpendLog.create({
-      data: {
-        userId,
-        feature,
-        credits: featureCost.creditsCost,
-        reason: `Rate limit bypass: ${feature}`,
-        balance: newBalance,
-      },
-    });
-
-    return { success: true, newBalance };
-  } catch {
-    return { success: false, newBalance: 0, error: "Failed to process credits" };
-  }
+  return { creditsPerExport: 1, creditsPerMinute: 1 };
 }

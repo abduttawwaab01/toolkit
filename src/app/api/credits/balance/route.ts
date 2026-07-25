@@ -7,17 +7,18 @@ const prisma = new PrismaClient();
 
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return jsonResponse({ error: "Unauthorized" }, 401);
+  const userId = (session?.user as any)?.id as string | undefined;
+  if (!userId) {
+    return jsonResponse({ error: "Unauthorized" }, { status: 401 });
   }
 
   const user = await prisma.user.findUnique({
-    where: { id: session.user.id as string },
+    where: { id: userId },
     select: { creditsBalance: true, role: true },
   });
 
   if (!user) {
-    return jsonResponse({ error: "User not found" }, 404);
+    return jsonResponse({ error: "User not found" }, { status: 404 });
   }
 
   return jsonResponse({

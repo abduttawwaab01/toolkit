@@ -16,6 +16,9 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { cn, formatBytes } from "@/lib/utils";
 import { useDocumentStore } from "@/lib/document-store";
+import { useExportCredits } from "@/hooks/use-export-credits";
+import { CreditSpendDialog } from "@/components/credits/credit-spend-dialog";
+import { CreditPurchaseModal } from "@/components/credits/credit-purchase-modal";
 
 interface ExportFormat {
   id: string;
@@ -79,6 +82,7 @@ export function DocumentExport() {
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [exported, setExported] = useState(false);
+  const credits = useExportCredits();
 
   const estimateSize = useCallback(() => {
     const charBytes = new TextEncoder().encode(rawContent).length;
@@ -94,6 +98,12 @@ export function DocumentExport() {
     setError(null);
 
     try {
+      const allowed = await credits.checkExportCredits(0);
+      if (!allowed) {
+        setLoading(false);
+        return;
+      }
+
       const format = EXPORT_FORMATS.find((f) => f.id === selectedFormat);
       if (!format) throw new Error("Invalid format");
 
@@ -140,7 +150,7 @@ export function DocumentExport() {
     } finally {
       setLoading(false);
     }
-  }, [selectedFormat, fileName, rawContent, currentDocument]);
+  }, [selectedFormat, fileName, rawContent, currentDocument, credits]);
 
   return (
     <motion.div
@@ -279,6 +289,22 @@ export function DocumentExport() {
           </Button>
         </div>
       </GlassCard>
+
+      {credits.showSpendDialog && (
+        <CreditSpendDialog
+          feature="export"
+          featureLabel="Document Export"
+          creditsCost={credits.pendingCost}
+          onSpend={credits.confirmSpend}
+          onCancel={credits.cancelSpend}
+          loading={credits.spending}
+        />
+      )}
+
+      <CreditPurchaseModal
+        open={credits.showPurchaseModal}
+        onClose={() => credits.setShowPurchaseModal(false)}
+      />
     </motion.div>
   );
 }

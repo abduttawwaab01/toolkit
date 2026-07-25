@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { APP_NAME, NAV_LINKS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { CreditBalance } from "@/components/credits/credit-balance";
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -55,6 +56,7 @@ export function Navbar() {
         </nav>
 
         <div className="hidden md:flex items-center gap-3">
+          <CreditBalance compact />
           <ThemeToggle />
           <Button variant="ghost" size="sm">Sign In</Button>
           <Button variant="neon" size="sm">Try Free</Button>
@@ -85,6 +87,7 @@ export function Navbar() {
                 </a>
               ))}
               <div className="flex gap-3 pt-2">
+                <CreditBalance compact />
                 <ThemeToggle />
                 <Button variant="ghost" size="sm" className="flex-1">Sign In</Button>
                 <Button variant="neon" size="sm" className="flex-1">Try Free</Button>

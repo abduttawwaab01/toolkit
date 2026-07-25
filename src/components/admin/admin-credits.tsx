@@ -58,33 +58,27 @@ interface PurchaseRequest {
   createdAt: string;
 }
 
-interface FeatureCost {
-  id: string;
-  featureKey: string;
-  label: string;
-  creditsCost: number;
-  enabled: boolean;
-  description: string;
+interface ExportLimit {
+  role: string;
+  freeExportsPerDay: number;
+  freeExportsPerWeek: number;
+  freeExportsPerMonth: number;
+  freeExportsPerYear: number;
+  creditsPerExport: number;
+  creditsPerMinute: number;
 }
 
-const defaultFeatures: FeatureCost[] = [
-  { id: "1", featureKey: "ai_video_editing", label: "AI Video Editing", creditsCost: 1, enabled: true, description: "AI-powered video editing tools" },
-  { id: "2", featureKey: "ai_audio_studio", label: "AI Audio Studio", creditsCost: 1, enabled: true, description: "AI audio processing and effects" },
-  { id: "3", featureKey: "voice_cloning", label: "Voice Cloning", creditsCost: 1, enabled: true, description: "Clone and generate voice content" },
-  { id: "4", featureKey: "ai_image_tools", label: "AI Image Tools", creditsCost: 1, enabled: true, description: "AI image generation and editing" },
-  { id: "5", featureKey: "ai_co_pilot", label: "AI Co-Pilot", creditsCost: 1, enabled: true, description: "AI assistant for content creation" },
-  { id: "6", featureKey: "export_hd", label: "Export HD", creditsCost: 1, enabled: true, description: "Export content in HD quality" },
-  { id: "7", featureKey: "export_4k", label: "Export 4K", creditsCost: 1, enabled: true, description: "Export content in 4K quality" },
-  { id: "8", featureKey: "document_convert", label: "Document Convert", creditsCost: 1, enabled: true, description: "Convert between document formats" },
-  { id: "9", featureKey: "ai_transcription", label: "AI Transcription", creditsCost: 1, enabled: true, description: "AI-powered speech-to-text transcription" },
-  { id: "10", featureKey: "text_to_speech", label: "Text to Speech", creditsCost: 1, enabled: true, description: "Convert text to natural speech" },
+const defaultExportLimits: ExportLimit[] = [
+  { role: "GUEST", freeExportsPerDay: 1, freeExportsPerWeek: 3, freeExportsPerMonth: 5, freeExportsPerYear: 30, creditsPerExport: 2, creditsPerMinute: 2 },
+  { role: "USER", freeExportsPerDay: 3, freeExportsPerWeek: 15, freeExportsPerMonth: 50, freeExportsPerYear: 500, creditsPerExport: 1, creditsPerMinute: 1 },
+  { role: "ADMIN", freeExportsPerDay: 9999, freeExportsPerWeek: 9999, freeExportsPerMonth: 9999, freeExportsPerYear: 9999, creditsPerExport: 0, creditsPerMinute: 0 },
 ];
 
 const subTabs = [
   { id: "bank", label: "Bank Details", icon: Building2 },
   { id: "packages", label: "Packages", icon: Package },
   { id: "purchases", label: "Purchase Requests", icon: ShoppingCart },
-  { id: "features", label: "Feature Costs", icon: Settings },
+  { id: "export-limits", label: "Export Limits", icon: Settings },
 ] as const;
 
 export function AdminCredits() {
@@ -140,7 +134,7 @@ export function AdminCredits() {
           {activeSubTab === "bank" && <BankDetailsTab onToast={setToast} />}
           {activeSubTab === "packages" && <PackagesTab onToast={setToast} />}
           {activeSubTab === "purchases" && <PurchasesTab onToast={setToast} />}
-          {activeSubTab === "features" && <FeaturesTab onToast={setToast} />}
+          {activeSubTab === "export-limits" && <ExportLimitsTab onToast={setToast} />}
         </motion.div>
       </AnimatePresence>
 
@@ -777,37 +771,39 @@ function PurchasesTab({ onToast }: { onToast: (t: { message: string; type: "succ
   );
 }
 
-function FeaturesTab({ onToast }: { onToast: (t: { message: string; type: "success" | "error" }) => void }) {
-  const [features, setFeatures] = useState<FeatureCost[]>(defaultFeatures);
+function ExportLimitsTab({ onToast }: { onToast: (t: { message: string; type: "success" | "error" }) => void }) {
+  const [limits, setLimits] = useState<ExportLimit[]>(defaultExportLimits);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch("/api/credits/feature-costs")
+    fetch("/api/credits/export-limits")
       .then((r) => { if (!r.ok) throw new Error("Failed"); return r.json(); })
-      .then((data: FeatureCost[]) => {
-        if (data.length > 0) setFeatures(data);
+      .then((data) => {
+        if (data.rules && data.rules.length > 0) setLimits(data.rules);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  const updateFeature = (id: string, key: keyof FeatureCost, value: any) => {
-    setFeatures((prev) => prev.map((f) => f.id === id ? { ...f, [key]: value } : f));
+  const updateLimit = (role: string, key: keyof ExportLimit, value: number) => {
+    setLimits((prev) => prev.map((l) => l.role === role ? { ...l, [key]: value } : l));
   };
 
   const handleSaveAll = async () => {
     setSaving(true);
     try {
-      const res = await fetch("/api/credits/feature-costs", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(features),
-      });
-      if (!res.ok) throw new Error("Failed");
-      onToast({ message: "Feature costs saved", type: "success" });
+      for (const limit of limits) {
+        const res = await fetch("/api/credits/export-limits", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(limit),
+        });
+        if (!res.ok) throw new Error("Failed");
+      }
+      onToast({ message: "Export limits saved", type: "success" });
     } catch {
-      onToast({ message: "Failed to save feature costs", type: "error" });
+      onToast({ message: "Failed to save export limits", type: "error" });
     } finally {
       setSaving(false);
     }
@@ -817,7 +813,7 @@ function FeaturesTab({ onToast }: { onToast: (t: { message: string; type: "succe
     return (
       <div className="flex items-center gap-2 py-8 justify-center text-text-secondary">
         <div className="size-4 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin" />
-        <span className="text-sm">Loading feature costs...</span>
+        <span className="text-sm">Loading export limits...</span>
       </div>
     );
   }
@@ -825,62 +821,57 @@ function FeaturesTab({ onToast }: { onToast: (t: { message: string; type: "succe
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-text-secondary">{features.length} features configured</p>
+        <p className="text-sm text-text-secondary">Free export limits per role + credit costs</p>
         <Button variant="neon" size="sm" onClick={handleSaveAll} loading={saving}>
           <Save size={14} />
           Save All
         </Button>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border-subtle">
-              <th className="text-left py-3 pr-3 font-medium text-text-secondary">Feature</th>
-              <th className="text-right py-3 px-3 font-medium text-text-secondary">Credits Cost</th>
-              <th className="text-center py-3 px-3 font-medium text-text-secondary">Enabled</th>
-              <th className="text-left py-3 pl-3 font-medium text-text-secondary">Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            {features.map((f, i) => (
-              <motion.tr
-                key={f.id}
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.03 }}
-                className="border-b border-border-subtle/50 last:border-0"
-              >
-                <td className="py-3 pr-3 font-medium">{f.label}</td>
-                <td className="py-3 px-3 text-right">
-                  <input
-                    type="number"
-                    min={0}
-                    value={f.creditsCost}
-                    onChange={(e) => updateFeature(f.id, "creditsCost", Number(e.target.value))}
-                    className="w-20 glass rounded-lg px-2 py-1 text-sm text-right font-mono focus:outline-none focus:border-neon-cyan/30"
-                  />
-                </td>
-                <td className="py-3 px-3 text-center">
-                  <button
-                    onClick={() => updateFeature(f.id, "enabled", !f.enabled)}
-                    className={`relative w-10 h-5 rounded-full transition-colors ${f.enabled ? "bg-neon-cyan/30" : "bg-glass-medium"}`}
-                  >
-                    <motion.div animate={{ x: f.enabled ? 20 : 2 }} className="absolute top-0.5 size-4 rounded-full bg-white" />
-                  </button>
-                </td>
-                <td className="py-3 pl-3">
-                  <input
-                    type="text"
-                    value={f.description}
-                    onChange={(e) => updateFeature(f.id, "description", e.target.value)}
-                    className="w-full glass rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-neon-cyan/30"
-                  />
-                </td>
-              </motion.tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="space-y-4">
+        {limits.map((limit) => (
+          <div key={limit.role} className="glass rounded-xl p-5">
+            <h4 className="text-sm font-semibold mb-3 text-neon-cyan">{limit.role}</h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="text-[10px] text-text-tertiary uppercase tracking-wider block mb-1">Free/Day</label>
+                <input type="number" min={0} value={limit.freeExportsPerDay}
+                  onChange={(e) => updateLimit(limit.role, "freeExportsPerDay", Number(e.target.value))}
+                  className="w-full glass rounded-lg px-2 py-1.5 text-sm font-mono focus:outline-none focus:border-neon-cyan/30" />
+              </div>
+              <div>
+                <label className="text-[10px] text-text-tertiary uppercase tracking-wider block mb-1">Free/Week</label>
+                <input type="number" min={0} value={limit.freeExportsPerWeek}
+                  onChange={(e) => updateLimit(limit.role, "freeExportsPerWeek", Number(e.target.value))}
+                  className="w-full glass rounded-lg px-2 py-1.5 text-sm font-mono focus:outline-none focus:border-neon-cyan/30" />
+              </div>
+              <div>
+                <label className="text-[10px] text-text-tertiary uppercase tracking-wider block mb-1">Free/Month</label>
+                <input type="number" min={0} value={limit.freeExportsPerMonth}
+                  onChange={(e) => updateLimit(limit.role, "freeExportsPerMonth", Number(e.target.value))}
+                  className="w-full glass rounded-lg px-2 py-1.5 text-sm font-mono focus:outline-none focus:border-neon-cyan/30" />
+              </div>
+              <div>
+                <label className="text-[10px] text-text-tertiary uppercase tracking-wider block mb-1">Free/Year</label>
+                <input type="number" min={0} value={limit.freeExportsPerYear}
+                  onChange={(e) => updateLimit(limit.role, "freeExportsPerYear", Number(e.target.value))}
+                  className="w-full glass rounded-lg px-2 py-1.5 text-sm font-mono focus:outline-none focus:border-neon-cyan/30" />
+              </div>
+              <div>
+                <label className="text-[10px] text-text-tertiary uppercase tracking-wider block mb-1">Credits/Export</label>
+                <input type="number" min={0} value={limit.creditsPerExport}
+                  onChange={(e) => updateLimit(limit.role, "creditsPerExport", Number(e.target.value))}
+                  className="w-full glass rounded-lg px-2 py-1.5 text-sm font-mono focus:outline-none focus:border-neon-cyan/30" />
+              </div>
+              <div>
+                <label className="text-[10px] text-text-tertiary uppercase tracking-wider block mb-1">Credits/Minute</label>
+                <input type="number" min={0} value={limit.creditsPerMinute}
+                  onChange={(e) => updateLimit(limit.role, "creditsPerMinute", Number(e.target.value))}
+                  className="w-full glass rounded-lg px-2 py-1.5 text-sm font-mono focus:outline-none focus:border-neon-cyan/30" />
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   const passwordHash = await bcrypt.hash("successor", 12);
-  const admin = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: "admin@skoolar.org" },
     update: { passwordHash, name: "Admin", role: "ADMIN", creditsBalance: 999999, storageLimit: BigInt("1099511627776") },
     create: { email: "admin@skoolar.org", passwordHash, name: "Admin", role: "ADMIN", creditsBalance: 999999, storageLimit: BigInt("1099511627776") },
@@ -32,6 +32,8 @@ async function main() {
         exportQuality: "standard", exportWatermark: true, aiCreditsPerDay: 3,
         maxDocuments: 5, maxDocumentSizeKB: 1024,
         allowedDocFormats: '["txt","md","html"]',
+        freeExportsPerDay: 1, freeExportsPerWeek: 3, freeExportsPerMonth: 5, freeExportsPerYear: 30,
+        creditsPerExport: 2, creditsPerMinute: 2,
       },
       USER: {
         requestsPerMinute: 60, requestsPerHour: 1000, concurrentJobs: 3,
@@ -40,6 +42,8 @@ async function main() {
         exportQuality: "high", exportWatermark: false, aiCreditsPerDay: 10,
         maxDocuments: 50, maxDocumentSizeKB: 5120,
         allowedDocFormats: '["txt","md","html","pdf","docx","rtf"]',
+        freeExportsPerDay: 3, freeExportsPerWeek: 15, freeExportsPerMonth: 50, freeExportsPerYear: 500,
+        creditsPerExport: 1, creditsPerMinute: 1,
       },
       ADMIN: {
         requestsPerMinute: 1000, requestsPerHour: 50000, concurrentJobs: 100,
@@ -48,6 +52,8 @@ async function main() {
         exportQuality: "lossless", exportWatermark: false, aiCreditsPerDay: 1000,
         maxDocuments: 99999, maxDocumentSizeKB: 102400,
         allowedDocFormats: '["txt","md","html","pdf","docx","rtf"]',
+        freeExportsPerDay: 9999, freeExportsPerWeek: 9999, freeExportsPerMonth: 9999, freeExportsPerYear: 9999,
+        creditsPerExport: 0, creditsPerMinute: 0,
       },
     };
 
@@ -88,7 +94,7 @@ async function main() {
     },
   });
 
-  // Seed credit packages
+  // Seed credit packages — ₦500 per credit default
   const packages = [
     { id: "pkg-5", name: "Starter", credits: 5, priceNaira: 2500, bonusCredits: 0, description: "5 credits for occasional use", sortOrder: 1 },
     { id: "pkg-15", name: "Popular", credits: 15, priceNaira: 6000, bonusCredits: 2, description: "15 credits + 2 bonus — most popular", sortOrder: 2 },
@@ -104,29 +110,7 @@ async function main() {
     });
   }
 
-  // Seed feature credit costs (1 credit per feature default)
-  const featureCosts = [
-    { featureKey: "ai-video-editing", featureLabel: "AI Video Editing", creditsCost: 1, description: "Smart cut, scene detection, object removal" },
-    { featureKey: "ai-audio-studio", featureLabel: "AI Audio Studio", creditsCost: 1, description: "Noise cancellation, vocal isolation" },
-    { featureKey: "voice-cloning", featureLabel: "Voice Cloning", creditsCost: 2, description: "Clone any voice from sample audio" },
-    { featureKey: "ai-image-tools", featureLabel: "AI Image Tools", creditsCost: 1, description: "Background removal, upscaling, inpainting" },
-    { featureKey: "ai-copilot", featureLabel: "AI Co-Pilot", creditsCost: 1, description: "AI chat for scripts, titles, descriptions" },
-    { featureKey: "export-hd", featureLabel: "Export HD (1080p)", creditsCost: 1, description: "Export video in HD quality" },
-    { featureKey: "export-4k", featureLabel: "Export 4K", creditsCost: 2, description: "Export video in 4K quality" },
-    { featureKey: "document-converter", featureLabel: "Document Convert", creditsCost: 1, description: "Convert between document formats" },
-    { featureKey: "ai-transcription", featureLabel: "AI Transcription", creditsCost: 1, description: "Speech-to-text transcription" },
-    { featureKey: "text-to-speech", featureLabel: "Text to Speech", creditsCost: 1, description: "AI voice synthesis from text" },
-  ];
-
-  for (const fc of featureCosts) {
-    await prisma.featureCreditCost.upsert({
-      where: { featureKey: fc.featureKey },
-      update: {},
-      create: { ...fc, isEnabled: true },
-    });
-  }
-
-  console.log("✅ Seeded: admin user, auto-delete configs, rate limits, feature toggles, bank details, credit packages, feature costs.");
+  console.log("✅ Seeded: admin user, auto-delete configs, rate limits, feature toggles, bank details, credit packages.");
   console.log(`   Admin: admin@skoolar.org / successor`);
 }
 

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEditorStore } from "@/lib/editor-store";
+import { useImageEditorStore } from "@/lib/image-editor-store";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { ToastProvider } from "@/components/ui/toast/toast";
 import { KeyboardShortcutsModal, useKeyboardShortcuts } from "@/components/ui/keyboard-shortcuts";
@@ -33,6 +34,7 @@ const AIToolsPanel = lazy(() => import("@/components/editor/ai/ai-tools-panel").
 const EditorSettings = lazy(() => import("@/components/editor/settings/editor-settings").then(m => ({ default: m.EditorSettings })));
 const ElementsPanel = lazy(() => import("@/components/editor/overlay/elements-panel").then(m => ({ default: m.ElementsPanel })));
 const VideoEnhancerPanel = lazy(() => import("@/components/editor/video/video-enhancer-panel").then(m => ({ default: m.VideoEnhancerPanel })));
+const ImageEditor = lazy(() => import("@/components/editor/image/image-editor").then(m => ({ default: m.ImageEditor })));
 
 function PanelFallback({ label }: { label: string }) {
   return (
@@ -96,6 +98,7 @@ export default function EditorPage() {
             <Suspense fallback={<MediaGridSkeleton />}>
               <MediaGrid
                 userId="demo-user"
+                onEditImage={(url) => useImageEditorStore.getState().openEditor(url)}
                 onAddToTimeline={(item) => {
                   const store = useEditorStore.getState();
                   if (store.tracks.length > 0) {
@@ -401,6 +404,7 @@ export default function EditorPage() {
 
         {/* Modals / Sheets */}
         <Suspense fallback={null}><ExportDialog /></Suspense>
+        <Suspense fallback={null}><ImageEditor /></Suspense>
         <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
         <WelcomeTour />
 

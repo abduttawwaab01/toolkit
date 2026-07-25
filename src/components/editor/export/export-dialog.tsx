@@ -8,6 +8,9 @@ import { EXPORT_PRESETS, getPresetsByCategory } from "@/lib/export/presets";
 import { ExportEngine } from "@/lib/export/index";
 import type { ExportSettings, ExportPresetDefinition, ExportJob, ExportProgress, ExportFormat, ExportResolution, ExportVideoCodec, ExportAudioCodec, ExportFramerate } from "@/types/export";
 import { RESOLUTIONS, FORMAT_INFO, defaultExportSettings } from "@/types/export";
+import { useExportCredits } from "@/hooks/use-export-credits";
+import { CreditSpendDialog } from "@/components/credits/credit-spend-dialog";
+import { CreditPurchaseModal } from "@/components/credits/credit-purchase-modal";
 
 type ExportTab = "settings" | "presets" | "history";
 
@@ -75,6 +78,8 @@ export function ExportDialog() {
   const [settings, setSettings] = useState<ExportSettings>(defaultExportSettings());
   const [activeJob, setActiveJob] = useState<ExportJob | null>(null);
   const engineRef = useRef<ExportEngine | null>(null);
+  const credits = useExportCredits();
+  const projectDuration = useEditorStore((s) => s.project.duration);
 
   const estimatedSize = useMemo(() => {
     const { videoBitrate, audioBitrate, format, framerate, resolution } = settings;
@@ -93,6 +98,10 @@ export function ExportDialog() {
   }, []);
 
   const startExport = useCallback(async () => {
+    const durationMinutes = Math.max(1, Math.ceil(projectDuration / 60));
+    const allowed = await credits.checkExportCredits(durationMinutes);
+    if (!allowed) return;
+
     const id = crypto.randomUUID();
     const job: ExportJob = {
       id,
@@ -156,7 +165,7 @@ export function ExportDialog() {
     });
     engineRef.current = engine;
     await engine.start(videoEl, canvasEl);
-  }, [settings, addExportHistoryEntry]);
+  }, [settings, addExportHistoryEntry, credits, projectDuration]);
 
   const cancelExport = useCallback(() => {
     engineRef.current?.cancel();
@@ -271,6 +280,22 @@ export function ExportDialog() {
           </motion.div>
         </motion.div>
       )}
+
+      {credits.showSpendDialog && (
+        <CreditSpendDialog
+          feature="export"
+          featureLabel="Video Export"
+          creditsCost={credits.pendingCost}
+          onSpend={credits.confirmSpend}
+          onCancel={credits.cancelSpend}
+          loading={credits.spending}
+        />
+      )}
+
+      <CreditPurchaseModal
+        open={credits.showPurchaseModal}
+        onClose={() => credits.setShowPurchaseModal(false)}
+      />
     </AnimatePresence>
   );
 }
