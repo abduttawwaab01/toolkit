@@ -10,6 +10,8 @@ export function useAutoSave(interval = 30000) {
   const [status, setStatus] = useState<SaveStatus>("saved");
   const lastSaveRef = useRef<string>("");
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const savingRef = useRef(false);
+  const mountedRef = useRef(true);
 
   const getStateHash = useCallback(() => {
     const state = useEditorStore.getState();
@@ -22,7 +24,8 @@ export function useAutoSave(interval = 30000) {
   }, []);
 
   const save = useCallback(async () => {
-    setStatus("saving");
+    if (savingRef.current) return;
+    savingRef.current = true;
 
     try {
       const state = useEditorStore.getState();
@@ -35,37 +38,37 @@ export function useAutoSave(interval = 30000) {
         zoom: state.zoom,
       };
 
-      // Save to localStorage
       localStorage.setItem("toolkit_project", JSON.stringify(data));
       localStorage.setItem("toolkit_project_saved_at", Date.now().toString());
 
       lastSaveRef.current = getStateHash();
-      setStatus("saved");
+      if (mountedRef.current) setStatus("saved");
 
-      // Also attempt server save if available
-      try {
-        await fetch("/api/projects/save", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: state.project.id,
-            name: state.project.name,
-            data,
-          }),
-        }).catch(() => { /* offline is fine */ });
-      } catch {
-        // Silently fail - will save to localStorage
-      }
+      fetch("/api/projects/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: state.project.id,
+          name: state.project.name,
+          data,
+        }),
+      }).catch(() => {});
     } catch {
-      setStatus("offline");
+      if (mountedRef.current) setStatus("offline");
+    } finally {
+      savingRef.current = false;
     }
   }, [getStateHash]);
 
-  // Auto-save on interval
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   useEffect(() => {
     timerRef.current = setInterval(() => {
       const currentHash = getStateHash();
-      if (currentHash !== lastSaveRef.current) {
+      if (currentHash !== lastSaveRef.current && !savingRef.current) {
         save();
       }
     }, interval);
@@ -75,7 +78,6 @@ export function useAutoSave(interval = 30000) {
     };
   }, [save, interval, getStateHash]);
 
-  // Save on page unload
   useEffect(() => {
     const handleBeforeUnload = () => {
       const currentHash = getStateHash();
@@ -101,16 +103,23 @@ export function useAutoSave(interval = 30000) {
 
 export function SaveIndicator({ status }: { status: SaveStatus }) {
   const [visible, setVisible] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+
     if (status === "saving" || status === "unsaved") {
       setVisible(true);
     } else if (status === "saved") {
-      const t = setTimeout(() => setVisible(false), 2000);
-      return () => clearTimeout(t);
+      setVisible(true);
+      timerRef.current = setTimeout(() => setVisible(false), 2000);
     } else {
       setVisible(true);
     }
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [status]);
 
   if (!visible) return null;

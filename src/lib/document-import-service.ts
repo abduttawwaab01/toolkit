@@ -115,6 +115,7 @@ interface LineGroup {
 }
 
 function groupItemsIntoLines(items: TextItem[], pageHeight: number): LineGroup[] {
+  if (!items || items.length === 0) return [];
   const lines: LineGroup[] = [];
   const EPSILON = 3;
 

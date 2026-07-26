@@ -7,7 +7,7 @@ import { decodeAudioFile, processVocalIsolation, audioBufferToWav } from "@/lib/
 import type { AudioEffectType } from "@/types/editor";
 
 export function AudioProcessing() {
-  const { selectedTrackId, tracks, clips, addAudioEffectToTrack, removeAudioEffectFromTrack, updateAudioEffectParam, toggleAudioEffect, addClip, selectClip } = useEditorStore();
+  const { selectedTrackId, selectedClipId, tracks, clips, addAudioEffectToTrack, removeAudioEffectFromTrack, updateAudioEffectParam, toggleAudioEffect, addClip, selectClip } = useEditorStore();
   const track = tracks.find((t) => t.id === selectedTrackId);
   const [statusMsg, setStatusMsg] = useState("");
   const [aiProcessing, setAiProcessing] = useState(false);
@@ -204,14 +204,14 @@ export function AudioProcessing() {
           <div className="grid grid-cols-2 gap-1">
             <button
               onClick={handleAiVocalIsolation}
-              disabled={aiProcessing || !clips.some((c) => c.id === useEditorStore.getState().selectedClipId)}
+              disabled={aiProcessing || !selectedClipId}
               className="glass rounded-lg px-2 py-1.5 text-left text-[10px] text-neon-cyan hover:bg-neon-cyan/10 transition-colors border border-neon-cyan/30 disabled:opacity-30"
             >
               {aiProcessing ? <>⏳ {aiProgress}</> : <>🗣 Extract Vocals</>}
             </button>
             <button
               onClick={handleAiMusicIsolation}
-              disabled={aiProcessing || !clips.some((c) => c.id === useEditorStore.getState().selectedClipId)}
+              disabled={aiProcessing || !selectedClipId}
               className="glass rounded-lg px-2 py-1.5 text-left text-[10px] text-neon-pink hover:bg-neon-pink/10 transition-colors border border-neon-pink/30 disabled:opacity-30"
             >
               {aiProcessing ? <>⏳ {aiProgress}</> : <>🎸 Extract Music</>}
