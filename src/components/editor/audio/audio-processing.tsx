@@ -1,14 +1,69 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useEditorStore } from "@/lib/editor-store";
 import { AUDIO_EFFECT_DEFINITIONS, getAudioEffectDefinition } from "@/lib/effects/audio-effects";
+import { decodeAudioFile, processVocalIsolation, audioBufferToWav } from "@/lib/audio-engine/index";
 import type { AudioEffectType } from "@/types/editor";
 
 export function AudioProcessing() {
-  const { selectedTrackId, tracks, addAudioEffectToTrack, removeAudioEffectFromTrack, updateAudioEffectParam, toggleAudioEffect } = useEditorStore();
+  const { selectedTrackId, tracks, clips, addAudioEffectToTrack, removeAudioEffectFromTrack, updateAudioEffectParam, toggleAudioEffect, addClip, selectClip } = useEditorStore();
   const track = tracks.find((t) => t.id === selectedTrackId);
   const [statusMsg, setStatusMsg] = useState("");
+  const [aiProcessing, setAiProcessing] = useState(false);
+  const [aiProgress, setAiProgress] = useState("");
+
+  const handleAiIsolation = useCallback(async (mode: "vocals" | "music") => {
+    const state = useEditorStore.getState();
+    const clipId = state.selectedClipId;
+    const clip = state.clips.find((c) => c.id === clipId);
+    if (!clip || !clip.src) { setStatusMsg("No clip selected"); return; }
+
+    setAiProcessing(true);
+    setAiProgress("Loading audio...");
+
+    try {
+      const response = await fetch(clip.src);
+      const blob = await response.blob();
+      const file = new File([blob], clip.name || "audio.wav", { type: blob.type || "audio/wav" });
+      const audioBuffer = await decodeAudioFile(file);
+
+      setAiProgress(mode === "vocals" ? "Extracting vocals..." : "Extracting music...");
+
+      const processed = await processVocalIsolation(audioBuffer, mode);
+      const wavBlob = audioBufferToWav(processed);
+      const url = URL.createObjectURL(wavBlob);
+
+      const trackId = state.selectedTrackId || state.tracks.find((t) => t.type === "audio")?.id;
+      if (!trackId) { setStatusMsg("No audio track"); setAiProcessing(false); return; }
+
+      const newClipId = addClip({
+        trackId,
+        type: "audio",
+        name: `${clip.name.replace(/\.[^.]+$/, "")} (${mode === "vocals" ? "vocals" : "music"})`,
+        src: url,
+        thumbnail: null,
+        startTime: clip.startTime,
+        duration: Math.min(processed.duration, clip.duration),
+        trimStart: 0, trimEnd: 0,
+        speed: 1, volume: 1,
+        volumeKeyframes: [],
+        effects: [],
+        opacity: 1, scale: 1, rotation: 0, positionX: 0, positionY: 0,
+      });
+
+      selectClip(newClipId);
+      setStatusMsg(`${mode === "vocals" ? "Vocals" : "Music"} extracted — new clip added to timeline`);
+    } catch (err: any) {
+      setStatusMsg(`Processing failed: ${err.message}`);
+    }
+
+    setAiProcessing(false);
+    setAiProgress("");
+  }, [addClip, selectClip]);
+
+  const handleAiVocalIsolation = () => handleAiIsolation("vocals");
+  const handleAiMusicIsolation = () => handleAiIsolation("music");
 
   if (!track) {
     return (
@@ -138,6 +193,30 @@ export function AudioProcessing() {
           {statusMsg && (
             <p className="text-[9px] text-neon-cyan">{statusMsg}</p>
           )}
+        </div>
+      )}
+
+      {/* AI-powered vocal isolation */}
+      {track && (
+        <div className="pt-2 border-t border-border-subtle/50">
+          <label className="text-[9px] text-text-tertiary block mb-1">AI Vocal Isolation</label>
+          <p className="text-[8px] text-text-tertiary mb-1.5">Process the selected clip with enhanced spectral analysis</p>
+          <div className="grid grid-cols-2 gap-1">
+            <button
+              onClick={handleAiVocalIsolation}
+              disabled={aiProcessing || !clips.some((c) => c.id === useEditorStore.getState().selectedClipId)}
+              className="glass rounded-lg px-2 py-1.5 text-left text-[10px] text-neon-cyan hover:bg-neon-cyan/10 transition-colors border border-neon-cyan/30 disabled:opacity-30"
+            >
+              {aiProcessing ? <>⏳ {aiProgress}</> : <>🗣 Extract Vocals</>}
+            </button>
+            <button
+              onClick={handleAiMusicIsolation}
+              disabled={aiProcessing || !clips.some((c) => c.id === useEditorStore.getState().selectedClipId)}
+              className="glass rounded-lg px-2 py-1.5 text-left text-[10px] text-neon-pink hover:bg-neon-pink/10 transition-colors border border-neon-pink/30 disabled:opacity-30"
+            >
+              {aiProcessing ? <>⏳ {aiProgress}</> : <>🎸 Extract Music</>}
+            </button>
+          </div>
         </div>
       )}
 

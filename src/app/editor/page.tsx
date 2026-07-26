@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from "react";
+import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Undo2, Redo2, Scissors, Play, Square,
@@ -48,6 +49,7 @@ function PanelFallback({ label }: { label: string }) {
 }
 
 export default function EditorPage() {
+  const { data: session } = useSession();
   const {
     isPlaying, togglePlay, undo, redo, selectedClipId, snapEnabled, toggleSnap,
     activePanel, setActivePanel, project, setProject, tracks, selectedTrackId, selectTrack,
@@ -59,7 +61,10 @@ export default function EditorPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [mobileSheet, setMobileSheet] = useState<{ open: boolean; panel: string }>({ open: false, panel: "" });
   const [showMobileTimeline, setShowMobileTimeline] = useState(false);
-  const [isGuest] = useState(() => typeof window !== "undefined" && !!localStorage.getItem("tk_guest_token"));
+
+  const userId = (session?.user as any)?.id as string | undefined;
+  const isGuest = !userId;
+  const userRole = (session?.user as any)?.role as string | undefined;
 
   const { open: shortcutsOpen, setOpen: setShortcutsOpen } = useKeyboardShortcuts();
   const { status: saveStatus } = useAutoSave(30000);
@@ -98,7 +103,7 @@ export default function EditorPage() {
           <ErrorBoundary key="media">
             <Suspense fallback={<MediaGridSkeleton />}>
               <MediaGrid
-                userId="demo-user"
+                userId={userId}
                 isGuest={isGuest}
                 onEditImage={(url) => useImageEditorStore.getState().openEditor(url)}
                 onAddToTimeline={(item) => {

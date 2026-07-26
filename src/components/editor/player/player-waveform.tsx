@@ -29,8 +29,11 @@ export function PlayerWaveform({ isPlaying }: PlayerWaveformProps) {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const video = canvas.closest("[data-player-container]")?.querySelector("video");
+    const video = canvas.closest("[data-player-container]")?.querySelector("video") as HTMLVideoElement | null;
     if (!video) return;
+
+    // Mute the video's native audio so it only plays through the Web Audio graph
+    video.muted = true;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -143,20 +146,27 @@ export function PlayerWaveform({ isPlaying }: PlayerWaveformProps) {
     };
   }, [isPlaying, effectRevision]);
 
-  // Resume AudioContext on first user interaction
+  // Resume AudioContext on user interaction (autoplay policy)
   useEffect(() => {
     const handler = () => {
       if (audioCtxRef.current?.state === "suspended") {
         audioCtxRef.current.resume();
       }
     };
-    document.addEventListener("click", handler, { once: true });
-    document.addEventListener("keydown", handler, { once: true });
+    document.addEventListener("click", handler);
+    document.addEventListener("keydown", handler);
     return () => {
       document.removeEventListener("click", handler);
       document.removeEventListener("keydown", handler);
     };
   }, []);
+
+  // Ensure AudioContext is running when playback starts
+  useEffect(() => {
+    if (isPlaying && audioCtxRef.current?.state === "suspended") {
+      audioCtxRef.current.resume();
+    }
+  }, [isPlaying]);
 
   useEffect(() => {
     return () => {

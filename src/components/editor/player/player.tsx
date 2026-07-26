@@ -134,6 +134,7 @@ export function Player() {
   return (
     <div
       ref={containerRef}
+      data-player-container
       className="flex-1 flex flex-col bg-surface-secondary rounded-2xl relative overflow-hidden min-h-[200px] group"
     >
       {/* Video element */}

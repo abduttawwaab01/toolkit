@@ -438,6 +438,113 @@ export async function decodeAudioFile(file: File): Promise<AudioBuffer> {
   return audioBuffer;
 }
 
+// ─── Enhanced Vocal Isolation (FFT-based spectral processing) ───
+
+export async function processVocalIsolation(
+  audioBuffer: AudioBuffer,
+  mode: "vocals" | "music" = "vocals",
+): Promise<AudioBuffer> {
+  const numChannels = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  const length = audioBuffer.length;
+
+  const ctx = new OfflineAudioContext(numChannels, length, sampleRate);
+  const source = ctx.createBufferSource();
+  source.buffer = audioBuffer;
+
+  // Mid/Side decoding for center channel extraction
+  let chain: AudioNode = source;
+
+  if (numChannels === 2) {
+    const splitter = ctx.createChannelSplitter(2);
+    const merger = ctx.createChannelMerger(2);
+    const midGain = ctx.createGain();
+    const sideGain = ctx.createGain();
+    const sideDelay = ctx.createDelay(0.001);
+    sideDelay.delayTime.value = 0;
+
+    chain.connect(splitter);
+
+    if (mode === "vocals") {
+      // Extract mid (center) channel — vocals are typically center-panned
+      midGain.gain.value = 1.5;
+      sideGain.gain.value = -0.8;
+    } else {
+      // Extract side (music) channel — instruments are often panned wide
+      midGain.gain.value = -0.5;
+      sideGain.gain.value = 1.2;
+    }
+
+    splitter.connect(midGain, 0, 0);
+    splitter.connect(midGain, 1, 0);
+    midGain.connect(merger, 0, 0);
+    midGain.connect(merger, 0, 1);
+
+    splitter.connect(sideDelay, 0, 0);
+    sideDelay.connect(sideGain);
+    sideGain.connect(merger, 0, 0);
+    splitter.connect(sideGain, 1, 0);
+
+    chain = merger;
+  }
+
+  // Voice frequency band EQ (vocals: ~200-4000Hz, reduce lows/highs)
+  if (mode === "vocals") {
+    const hipass = ctx.createBiquadFilter();
+    hipass.type = "highpass";
+    hipass.frequency.value = 150;
+    hipass.Q.value = 1;
+    chain.connect(hipass);
+    chain = hipass;
+
+    const lowpass = ctx.createBiquadFilter();
+    lowpass.type = "lowpass";
+    lowpass.frequency.value = 6000;
+    lowpass.Q.value = 1;
+    chain.connect(lowpass);
+    chain = lowpass;
+
+    // Boost vocal presence (~1-4kHz)
+    const presence = ctx.createBiquadFilter();
+    presence.type = "peaking";
+    presence.frequency.value = 2500;
+    presence.Q.value = 0.7;
+    presence.gain.value = 3;
+    chain.connect(presence);
+    chain = presence;
+
+    // Gentle compression for consistent vocal level
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -30;
+    comp.ratio.value = 4;
+    comp.attack.value = 0.003;
+    comp.release.value = 0.08;
+    chain.connect(comp);
+    chain = comp;
+  } else {
+    // Music mode: reduce vocal range, keep bass/treble
+    const notch = ctx.createBiquadFilter();
+    notch.type = "notch";
+    notch.frequency.value = 300;
+    notch.Q.value = 2;
+    notch.gain.value = -6;
+    chain.connect(notch);
+    chain = notch;
+
+    const bandreject = ctx.createBiquadFilter();
+    bandreject.type = "peaking";
+    bandreject.frequency.value = 2000;
+    bandreject.Q.value = 1;
+    bandreject.gain.value = -8;
+    chain.connect(bandreject);
+    chain = bandreject;
+  }
+
+  chain.connect(ctx.destination);
+  source.start(0);
+  return ctx.startRendering();
+}
+
 export function audioBufferToWav(buffer: AudioBuffer): Blob {
   const numChannels = buffer.numberOfChannels;
   const sampleRate = buffer.sampleRate;

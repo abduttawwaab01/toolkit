@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSignedUploadUrl, getPublicUrl } from "@/lib/r2";
 import { scheduleAutoDelete } from "@/lib/auto-delete";
-import { maybeRunCleanup } from "@/lib/cleanup";
+
+export const maxDuration = 60;
 
 const MAX_FILE_SIZE = 524288000;
 
 export async function POST(req: NextRequest) {
   try {
-    const { fileName, mimeType, fileSize, projectId } = await req.json();
-    const userId = req.headers.get("x-user-id") || req.nextUrl.searchParams.get("userId");
+    const { fileName, mimeType, fileSize, userId } = await req.json();
 
     if (!userId) {
       return NextResponse.json({ error: "User ID required" }, { status: 400 });
@@ -33,7 +33,6 @@ export async function POST(req: NextRequest) {
     const projectFile = await db.projectFile.create({
       data: {
         userId,
-        projectId,
         category: "RAW",
         storagePath: key,
         originalName: fileName,
@@ -47,8 +46,7 @@ export async function POST(req: NextRequest) {
       data: { storageUsed: { increment: fileSize } },
     });
 
-    await scheduleAutoDelete(projectFile.id);
-    await maybeRunCleanup();
+    scheduleAutoDelete(projectFile.id).catch(() => {});
 
     return NextResponse.json({
       id: projectFile.id,

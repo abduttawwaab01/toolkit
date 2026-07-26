@@ -1,43 +1,42 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { uploadFile } from "@/lib/r2";
 import { scheduleAutoDelete } from "@/lib/auto-delete";
-import { maybeRunCleanup } from "@/lib/cleanup";
 import { jsonResponse } from "@/lib/json";
 
-const MAX_FILE_SIZE = BigInt(524288000);
+export const maxDuration = 60;
+
+const MAX_FILE_SIZE = 524288000;
 
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for") || "unknown";
-  const userId = req.headers.get("x-user-id") || req.nextUrl.searchParams.get("userId");
+  const headerUserId = req.headers.get("x-user-id") || req.nextUrl.searchParams.get("userId");
   const role = req.headers.get("x-user-role") || "GUEST";
-  const isGuest = !userId || role === "GUEST";
 
-  // Guest uploads are handled client-side only — reject server-side uploads
-  if (isGuest) {
-    return jsonResponse({ error: "Guest uploads are handled in the browser. Please sign up for persistent storage." }, { status: 403 });
+  if (role === "GUEST" && !headerUserId) {
+    return jsonResponse(
+      { error: "Guest uploads are handled in the browser. Please sign up for persistent storage." },
+      { status: 403 },
+    );
   }
 
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File;
+    const formUserId = formData.get("userId") as string | null;
     const projectId = formData.get("projectId") as string | null;
+    const effectiveUserId = headerUserId || formUserId;
 
     if (!file) return jsonResponse({ error: "No file provided" }, { status: 400 });
-
-    // Enforce file size limit
-    if (BigInt(file.size) > MAX_FILE_SIZE) {
+    if (BigInt(file.size) > BigInt(MAX_FILE_SIZE)) {
       return jsonResponse({ error: "File size exceeds limit of 500 MB" }, { status: 413 });
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const key = `${userId}/${crypto.randomUUID()}-${file.name}`;
-
-    const effectiveUserId = userId;
-
     if (!effectiveUserId) return jsonResponse({ error: "Could not identify user" }, { status: 400 });
 
-    // Atomic storage update: only increment if under limit
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const key = `${effectiveUserId}/${crypto.randomUUID()}-${file.name}`;
+
+    // Atomic storage check + increment
     const storageLimit = BigInt(1073741824);
     const updateResult = await db.user.updateMany({
       where: {
@@ -67,13 +66,15 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Schedule auto-deletion
-    await scheduleAutoDelete(projectFile.id);
+    scheduleAutoDelete(projectFile.id).catch(() => {});
 
-    // Trigger cleanup check (runs at most every 5 min)
-    await maybeRunCleanup();
-
-    return jsonResponse({ id: projectFile.id, url, name: file.name, size: buffer.length, autoDeleteAt: projectFile.autoDeleteAt });
+    return jsonResponse({
+      id: projectFile.id,
+      url,
+      name: file.name,
+      size: buffer.length,
+      autoDeleteAt: projectFile.autoDeleteAt,
+    });
   } catch (error) {
     console.error("Upload error:", error);
     return jsonResponse({ error: "Upload failed" }, { status: 500 });
