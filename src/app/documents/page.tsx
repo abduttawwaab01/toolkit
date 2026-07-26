@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, ArrowLeft, Save, PanelLeftClose, PanelLeft, FileText,
   Code2, FileType, FileCode, History, ArrowRightLeft, Download,
-  Printer, Loader2, Tag, X, FileUp,
+  Printer, Loader2, Tag, X, FileUp, Keyboard, Layout,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, formatBytes } from "@/lib/utils";
@@ -18,6 +18,8 @@ import { DocumentVersions } from "@/components/documents/document-versions";
 import { DocumentExport } from "@/components/documents/document-export";
 import { Editor } from "@/components/documents/editor";
 import { FileUploadZone } from "@/components/documents/file-upload-zone";
+import { DocumentTemplates, type Template } from "@/components/documents/document-templates";
+import { KeyboardShortcuts } from "@/components/documents/keyboard-shortcuts";
 import { importFile, type ImportResult } from "@/lib/document-import-service";
 import type { Document, DocumentFormat } from "@/types/document";
 
@@ -31,6 +33,8 @@ const FORMAT_CONFIG: Record<DocumentFormat, { label: string; color: string; bg: 
 export default function DocumentsPage() {
   const [view, setView] = useState<"dashboard" | "editor">("dashboard");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== "undefined" ? window.innerWidth >= 768 : true);
   const [sidebarTab, setSidebarTab] = useState<"info" | "convert" | "versions" | "export">("info");
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -107,12 +111,15 @@ export default function DocumentsPage() {
     const content = typeof result.content === "string" && (result.format === "rich")
       ? (() => { try { return JSON.parse(result.content) as Record<string, unknown>; } catch { return result.content; } })()
       : result.content;
+    const titleSuffix = result.pageCount ? ` (${result.pageCount} pages)` : "";
     const doc = createDocument({ title: result.title, format: result.format });
     const updatedDoc: Document = {
       ...doc,
+      title: result.title,
       content: content as Record<string, unknown>,
       wordCount: typeof content === "string" ? content.trim().split(/\s+/).filter(Boolean).length : 0,
       mimeType: result.mimeType,
+      description: result.originalFormat ? `Imported ${result.originalFormat}${titleSuffix}` : undefined,
     };
     const docs = useDocumentStore.getState().documents.map((d) => d.id === doc.id ? updatedDoc : d);
     localStorage.setItem("toolkit-documents", JSON.stringify(docs));
@@ -172,9 +179,46 @@ export default function DocumentsPage() {
     });
   }, [isDirty, saveCurrentDocument, reset, loadDocuments]);
 
+  const handleSelectTemplate = useCallback((template: Template) => {
+    const content = JSON.parse(template.content) as Record<string, unknown>;
+    const doc = createDocument({ title: template.name, format: template.format });
+    const updatedDoc: Document = { ...doc, content };
+    const docs = useDocumentStore.getState().documents.map((d) => d.id === doc.id ? updatedDoc : d);
+    localStorage.setItem("toolkit-documents", JSON.stringify(docs));
+    useDocumentStore.setState({ documents: docs, currentDocument: updatedDoc });
+    setEditorContent(content);
+    const raw = JSON.stringify(content, null, 2);
+    setRawContent(raw);
+    setWordCount(0);
+    setCharCount(raw.length);
+    setIsDirty(false);
+    setShowTemplates(false);
+    setView("editor");
+  }, [createDocument, setEditorContent, setRawContent, setWordCount, setCharCount, setIsDirty]);
+
   useEffect(() => {
-    return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "?" && !e.ctrlKey && !e.metaKey) {
+        setShowShortcuts(true);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty || useDocumentStore.getState().isDirty) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [isDirty]);
 
   const sidebarItems = [
     { id: "info" as const, label: "Info", icon: FileText },
@@ -215,10 +259,23 @@ export default function DocumentsPage() {
                   <p className="text-xs text-text-tertiary">Create, edit, convert and export documents</p>
                 </div>
               </div>
-              <Button variant="neon" size="sm" onClick={() => setShowCreateDialog(true)}>
-                <Plus className="size-4" />
-                New Document
-              </Button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowShortcuts(true)}
+                  className="size-10 rounded-xl bg-glass-medium border border-border-subtle flex items-center justify-center text-text-tertiary hover:text-text-primary hover:bg-glass-heavy transition-colors"
+                  title="Keyboard Shortcuts"
+                >
+                  <Keyboard className="size-4" />
+                </button>
+                <Button variant="glass" size="sm" onClick={() => setShowTemplates(true)}>
+                  <Layout className="size-4" />
+                  Templates
+                </Button>
+                <Button variant="neon" size="sm" onClick={() => setShowCreateDialog(true)}>
+                  <Plus className="size-4" />
+                  New Document
+                </Button>
+              </div>
             </div>
 
             {stats && (
@@ -465,6 +522,14 @@ export default function DocumentsPage() {
         onClose={() => setShowCreateDialog(false)}
         onCreated={handleCreateDocument}
       />
+
+      {showTemplates && (
+        <DocumentTemplates onSelect={handleSelectTemplate} onClose={() => setShowTemplates(false)} />
+      )}
+
+      {showShortcuts && (
+        <KeyboardShortcuts onClose={() => setShowShortcuts(false)} />
+      )}
     </div>
   );
 }

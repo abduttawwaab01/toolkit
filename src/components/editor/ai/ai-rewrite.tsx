@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useEditorStore } from "@/lib/editor-store";
-import { getOpenRouterClient, AI_PROMPT_TEMPLATES, processPromptTemplate } from "@/lib/ai/index";
+import { AI_PROMPT_TEMPLATES, processPromptTemplate } from "@/lib/ai/index";
 import type { AIPromptTemplate } from "@/lib/ai/prompts";
 import { Sparkles, Copy, Check, Undo2 } from "lucide-react";
 
@@ -67,18 +67,24 @@ export function AIRewrite({ clip }: { clip: any }) {
     setResult(null);
 
     try {
-      const client = getOpenRouterClient();
-      const response = await client.chat(
-        [
-          { role: "system", content: selectedTemplate.systemPrompt },
-          { role: "user", content: prompt },
-        ],
-        {
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          feature: "chat",
+          messages: [
+            { role: "system", content: selectedTemplate.systemPrompt },
+            { role: "user", content: prompt },
+          ],
           temperature: selectedTemplate.temperature ?? 0.3,
           maxTokens: selectedTemplate.maxTokens ?? 2048,
-        },
-      );
-      setResult(response);
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "AI rewrite failed");
+
+      setResult(data.data?.text || "");
     } catch (err: any) {
       setError(err.message || "AI rewrite failed");
     }

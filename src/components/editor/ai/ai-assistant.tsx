@@ -1,17 +1,20 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { getOpenRouterClient } from "@/lib/ai/index";
 import { AI_PROMPT_TEMPLATES, processPromptTemplate } from "@/lib/ai/prompts";
-import type { OpenRouterMessage } from "@/lib/ai/openrouter";
 import { Send, Sparkles, Plus, Trash2, Copy, Check } from "lucide-react";
 import { useEditorStore } from "@/lib/editor-store";
+
+interface ChatMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
 
 const QUICK_ACTIONS = AI_PROMPT_TEMPLATES.slice(0, 4);
 
 export function AIChatAssistant() {
   const { clips, selectedClipId } = useEditorStore();
-  const [messages, setMessages] = useState<OpenRouterMessage[]>([
+  const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "system", content: "You are ToolKit AI, a helpful video editing assistant. You can help write scripts, polish subtitles, generate descriptions, suggest edits, and answer questions about video production. Keep answers concise and practical." },
   ]);
   const [input, setInput] = useState("");
@@ -30,7 +33,7 @@ export function AIChatAssistant() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText]);
 
-  const addMessage = (msg: OpenRouterMessage) => {
+  const addMessage = (msg: ChatMessage) => {
     setMessages((prev) => [...prev, msg]);
   };
 
@@ -38,7 +41,7 @@ export function AIChatAssistant() {
     const content = text || input.trim();
     if (!content || loading) return;
 
-    const userMsg: OpenRouterMessage = { role: "user", content };
+    const userMsg: ChatMessage = { role: "user", content };
     const context = clipText ? `(Context: editing clip "${clipText}") ` : "";
     const fullContent = context + content;
     const msgToSend = { ...userMsg, content: fullContent };
@@ -49,32 +52,35 @@ export function AIChatAssistant() {
     setStreamingText("");
 
     try {
-      const client = getOpenRouterClient();
       const allMessages = [...messages, msgToSend];
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          feature: "chat",
+          messages: allMessages,
+          temperature: 0.7,
+          maxTokens: 2048,
+        }),
+      });
 
-      // Try streaming first
-      let fullResponse = "";
-      try {
-        for await (const chunk of client.stream(allMessages, { temperature: 0.7, maxTokens: 2048 })) {
-          fullResponse += chunk;
-          setStreamingText(fullResponse);
-        }
-      } catch {
-        // Fall back to non-streaming
-        fullResponse = await client.chat(allMessages, { temperature: 0.7, maxTokens: 2048 });
-        setStreamingText(fullResponse);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "AI request failed");
       }
 
-      addMessage({ role: "assistant", content: fullResponse });
-      setStreamingText("");
+      const responseText = data.data?.text || "";
+      addMessage({ role: "assistant", content: responseText });
     } catch (err: any) {
       addMessage({
         role: "assistant",
-        content: `⚠ Error: ${err.message}. Please check your API key in Settings.`,
+        content: `Error: ${err.message || "AI request failed"}`,
       });
     }
 
     setLoading(false);
+    setStreamingText("");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

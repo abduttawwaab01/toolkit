@@ -48,8 +48,6 @@ export function isAIAvailable(): { speech: boolean; tts: boolean; openrouter: bo
     speech: typeof window !== "undefined" &&
       !!(window.SpeechRecognition || window.webkitSpeechRecognition),
     tts: typeof window !== "undefined" && "speechSynthesis" in window,
-    openrouter: typeof window !== "undefined"
-      ? !!localStorage.getItem("openrouter_key")
-      : false,
+    openrouter: true,
   };
 }

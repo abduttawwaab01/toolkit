@@ -22,11 +22,6 @@ const TABS: { id: AITab; label: string; icon: string }[] = [
 export function AIToolsPanel() {
   const { clips, selectedClipId } = useEditorStore();
   const [tab, setTab] = useState<AITab>("chat");
-  const [aiStatus, setAiStatus] = useState({ speech: false, tts: false, openrouter: false });
-
-  useEffect(() => {
-    setAiStatus(isAIAvailable());
-  }, []);
 
   const clip = clips.find((c) => c.id === selectedClipId);
 
@@ -50,25 +45,11 @@ export function AIToolsPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 pb-3">
-        {!aiStatus.openrouter && tab !== "settings" && (
-          <div className="glass rounded-xl p-3 mb-3 text-center">
-            <p className="text-[10px] text-text-tertiary mb-2">
-              Configure your OpenRouter API key in Settings to use AI features
-            </p>
-            <button
-              onClick={() => setTab("settings")}
-              className="text-[10px] text-neon-cyan underline"
-            >
-              Open Settings
-            </button>
-          </div>
-        )}
-
         {tab === "chat" && <AIChatAssistant />}
         {tab === "transcribe" && <AITranscription clip={clip} />}
         {tab === "rewrite" && <AIRewrite clip={clip} />}
         {tab === "smartcut" && <AISmartCut />}
-        {tab === "settings" && <AISettings onConfigured={() => setAiStatus(isAIAvailable())} />}
+        {tab === "settings" && <AISettings />}
       </div>
     </div>
   );

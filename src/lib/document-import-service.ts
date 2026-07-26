@@ -40,6 +40,8 @@ export interface ImportResult {
   title: string;
   mimeType: string;
   sourceType: string;
+  pageCount?: number;
+  originalFormat?: string;
 }
 
 function isImageFile(mimeType: string): boolean {
@@ -73,12 +75,7 @@ function detectMimeType(file: File): string {
 function createTipTapParagraph(text: string): Record<string, unknown> {
   return {
     type: "doc",
-    content: [
-      {
-        type: "paragraph",
-        content: [{ type: "text", text }],
-      },
-    ],
+    content: [{ type: "paragraph", content: [{ type: "text", text }] }],
   };
 }
 
@@ -86,20 +83,162 @@ function createTipTapImage(base64: string): Record<string, unknown> {
   return {
     type: "doc",
     content: [
-      {
-        type: "paragraph",
-        content: [],
-      },
-      {
-        type: "image",
-        attrs: { src: base64, alt: "Uploaded image" },
-      },
-      {
-        type: "paragraph",
-        content: [],
-      },
+      { type: "paragraph", content: [] },
+      { type: "image", attrs: { src: base64, alt: "Uploaded image" } },
+      { type: "paragraph", content: [] },
     ],
   };
+}
+
+function createRichDoc(nodes: Record<string, unknown>[]): Record<string, unknown> {
+  if (nodes.length === 0) nodes.push({ type: "paragraph" });
+  return { type: "doc", content: nodes };
+}
+
+interface TextItem {
+  str: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontName?: string;
+  fontSize?: number;
+}
+
+interface LineGroup {
+  y: number;
+  items: TextItem[];
+  fontSize: number;
+  fontName: string;
+  text: string;
+  x: number;
+}
+
+function groupItemsIntoLines(items: TextItem[], pageHeight: number): LineGroup[] {
+  const lines: LineGroup[] = [];
+  const EPSILON = 3;
+
+  const sorted = [...items].sort((a, b) => {
+    if (Math.abs(b.y - a.y) > EPSILON) return b.y - a.y;
+    return a.x - b.x;
+  });
+
+  let currentLine: TextItem[] = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1];
+    const curr = sorted[i];
+    if (Math.abs(curr.y - prev.y) <= EPSILON) {
+      currentLine.push(curr);
+    } else {
+      const lineX = Math.min(...currentLine.map((t) => t.x));
+      const lineText = currentLine
+        .sort((a, b) => a.x - b.x)
+        .map((t) => t.str)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const maxFont = currentLine.reduce(
+        (max, t) => (t.fontSize && t.fontSize > max ? t.fontSize : max),
+        0,
+      );
+      lines.push({
+        y: prev.y,
+        items: currentLine,
+        fontSize: maxFont,
+        fontName: currentLine[0]?.fontName || "",
+        text: lineText,
+        x: lineX,
+      });
+      currentLine = [curr];
+    }
+  }
+
+  if (currentLine.length > 0) {
+    const lineX = Math.min(...currentLine.map((t) => t.x));
+    const lineText = currentLine
+      .sort((a, b) => a.x - b.x)
+      .map((t) => t.str)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const maxFont = currentLine.reduce(
+      (max, t) => (t.fontSize && t.fontSize > max ? t.fontSize : max),
+      0,
+    );
+    lines.push({
+      y: sorted[sorted.length - 1].y,
+      items: currentLine,
+      fontSize: maxFont,
+      fontName: currentLine[0]?.fontName || "",
+      text: lineText,
+      x: lineX,
+    });
+  }
+
+  return lines.sort((a, b) => b.y - a.y);
+}
+
+function detectStructure(lines: LineGroup[]): Record<string, unknown>[] {
+  if (lines.length === 0) return [{ type: "paragraph" }];
+
+  const fontSizes = lines
+    .map((l) => l.fontSize)
+    .filter((s) => s > 0);
+  const avgFontSize =
+    fontSizes.length > 0
+      ? fontSizes.reduce((a, b) => a + b, 0) / fontSizes.length
+      : 12;
+  const headingThreshold = avgFontSize * 1.35;
+
+  const nodes: Record<string, unknown>[] = [];
+  const sorted = [...lines].sort((a, b) => b.y - a.y);
+  let prevY: number | null = null;
+  let paragraphBuffer: string[] = [];
+
+  function flushParagraph() {
+    if (paragraphBuffer.length === 0) return;
+    const text = paragraphBuffer.join(" ").replace(/\s+/g, " ").trim();
+    if (text) {
+      nodes.push({ type: "paragraph", content: [{ type: "text", text }] });
+    }
+    paragraphBuffer = [];
+  }
+
+  for (const line of sorted) {
+    const gap = prevY !== null ? prevY - line.y : 0;
+    const isHeading =
+      line.fontSize > 0 &&
+      (line.fontSize >= headingThreshold || line.fontName?.toLowerCase().includes("bold"));
+
+    if (isHeading && paragraphBuffer.length > 0) {
+      flushParagraph();
+    }
+
+    if (isHeading) {
+      flushParagraph();
+      const level =
+        line.fontSize >= avgFontSize * 2
+          ? 1
+          : line.fontSize >= avgFontSize * 1.6
+            ? 2
+            : 3;
+      nodes.push({
+        type: "heading",
+        attrs: { level: Math.min(level, 3) },
+        content: [{ type: "text", text: line.text }],
+      });
+    } else if (gap > 12 && paragraphBuffer.length > 0) {
+      flushParagraph();
+      paragraphBuffer.push(line.text);
+    } else {
+      paragraphBuffer.push(line.text);
+    }
+
+    prevY = line.y;
+  }
+
+  flushParagraph();
+  return nodes;
 }
 
 async function parseTxt(file: File): Promise<ImportResult> {
@@ -140,8 +279,61 @@ async function parseDocx(file: File): Promise<ImportResult> {
   const arrayBuffer = await file.arrayBuffer();
   const result = await mammoth.convertToHtml({ arrayBuffer });
   const html = result.value;
+  const nodes: Record<string, unknown>[] = [];
+
+  const headingRegex = /<h([1-6])[^>]*>(.*?)<\/h\1>/gi;
+  let lastIndex = 0;
+  const sections: { type: string; level?: number; text: string; index: number }[] = [];
+
+  let match: RegExpExecArray | null;
+  while ((match = headingRegex.exec(html)) !== null) {
+    const level = parseInt(match[1]);
+    const text = match[2].replace(/<[^>]+>/g, "").trim();
+    sections.push({ type: "heading", level: Math.min(level, 3), text, index: match.index });
+  }
+
+  const paraRegex = /<p[^>]*>(.*?)<\/p>/gi;
+  while ((match = paraRegex.exec(html)) !== null) {
+    const text = match[1].replace(/<[^>]+>/g, "").trim();
+    if (text) sections.push({ type: "paragraph", text, index: match.index });
+  }
+
+  const liRegex = /<li[^>]*>(.*?)<\/li>/gi;
+  let listItems: string[] = [];
+  while ((match = liRegex.exec(html)) !== null) {
+    const text = match[1].replace(/<[^>]+>/g, "").trim();
+    if (text) listItems.push(text);
+  }
+
+  sections.sort((a, b) => a.index - b.index);
+
+  for (const s of sections) {
+    if (s.type === "heading") {
+      nodes.push({
+        type: "heading",
+        attrs: { level: s.level || 1 },
+        content: [{ type: "text", text: s.text }],
+      });
+    } else {
+      nodes.push({
+        type: "paragraph",
+        content: [{ type: "text", text: s.text }],
+      });
+    }
+  }
+
+  if (listItems.length > 0 && nodes.length === 0) {
+    nodes.push({
+      type: "bulletList",
+      content: listItems.map((text) => ({
+        type: "listItem",
+        content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+      })),
+    });
+  }
+
   return {
-    content: createTipTapParagraph(html.replace(/<[^>]+>/g, "").trim() || "Imported DOCX content"),
+    content: createRichDoc(nodes),
     format: "rich",
     title: file.name.replace(/\.[^.]+$/, ""),
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -154,19 +346,42 @@ async function parsePdf(file: File): Promise<ImportResult> {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  let fullText = "";
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
+
+  const allNodes: Record<string, unknown>[] = [];
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 1 });
     const content = await page.getTextContent();
-    const pageText = content.items.map((item: any) => item.str).join(" ");
-    fullText += pageText + "\n\n";
+
+    const items: TextItem[] = content.items.map((item: any) => ({
+      str: item.str,
+      x: item.transform?.[4] || 0,
+      y: item.transform?.[5] || 0,
+      width: item.width || 0,
+      height: item.height || 0,
+      fontName: item.fontName || "",
+      fontSize: Number(item.fontSize?.replace("px", "") || item.height || 12),
+    }));
+
+    const lines = groupItemsIntoLines(items, viewport.height);
+    const pageNodes = detectStructure(lines);
+
+    if (pageNum > 1 && pageNodes.length > 0) {
+      allNodes.push({ type: "horizontalRule" });
+    }
+
+    allNodes.push(...pageNodes);
   }
+
   return {
-    content: createTipTapParagraph(fullText.trim() || "Imported PDF content"),
+    content: createRichDoc(allNodes),
     format: "rich",
     title: file.name.replace(/\.[^.]+$/, ""),
     mimeType: "application/pdf",
     sourceType: "file-pdf",
+    pageCount: pdf.numPages,
+    originalFormat: "PDF",
   };
 }
 

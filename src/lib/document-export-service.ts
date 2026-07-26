@@ -69,39 +69,67 @@ async function generatePdfBlob(content: string, title: string): Promise<Blob> {
   const usableWidth = pageWidth - margin * 2;
   let y = margin;
 
-  function addText(text: string, size: number, bold: boolean) {
-    pdf.setFontSize(size);
-    pdf.setFont("helvetica", bold ? "bold" : "normal");
-    const lines = pdf.splitTextToSize(text, usableWidth);
-    for (const line of lines) {
-      if (y + size * 1.5 > pdf.internal.pageSize.getHeight() - margin) {
-        pdf.addPage();
-        y = margin;
+  function addFormatted(html: string) {
+    const blocks = html.split(/(<h[1-6][^>]*>.*?<\/h[1-6]>|<table[\s\S]*?<\/table>|<pre>[\s\S]*?<\/pre>|<blockquote>[\s\S]*?<\/blockquote>|<hr\s*\/?>|<img[^>]*?>)/gi);
+    for (const block of blocks) {
+      if (!block.trim()) continue;
+
+      if (block.startsWith("<h1")) {
+        const text = block.replace(/<[^>]+>/g, "").trim();
+        pdf.setFontSize(18); pdf.setFont("helvetica", "bold");
+        const lines = pdf.splitTextToSize(text, usableWidth);
+        for (const line of lines) {
+          if (y + 24 > pdf.internal.pageSize.getHeight() - margin) { pdf.addPage(); y = margin; }
+          pdf.text(line, margin, y); y += 24;
+        }
+        y += 6;
+      } else if (block.startsWith("<h2")) {
+        const text = block.replace(/<[^>]+>/g, "").trim();
+        pdf.setFontSize(14); pdf.setFont("helvetica", "bold");
+        const lines = pdf.splitTextToSize(text, usableWidth);
+        for (const line of lines) {
+          if (y + 20 > pdf.internal.pageSize.getHeight() - margin) { pdf.addPage(); y = margin; }
+          pdf.text(line, margin, y); y += 20;
+        }
+        y += 4;
+      } else if (block.startsWith("<h3")) {
+        const text = block.replace(/<[^>]+>/g, "").trim();
+        pdf.setFontSize(12); pdf.setFont("helvetica", "bold");
+        const lines = pdf.splitTextToSize(text, usableWidth);
+        for (const line of lines) {
+          if (y + 18 > pdf.internal.pageSize.getHeight() - margin) { pdf.addPage(); y = margin; }
+          pdf.text(line, margin, y); y += 18;
+        }
+        y += 3;
+      } else if (block.startsWith("<hr")) {
+        y += 10;
+        if (y > pdf.internal.pageSize.getHeight() - margin) { pdf.addPage(); y = margin; }
+        pdf.setDrawColor(200, 200, 200);
+        pdf.line(margin, y, pageWidth - margin, y);
+        y += 10;
+      } else {
+        const text = block.replace(/<[^>]+>/g, "").trim();
+        if (!text) continue;
+        pdf.setFontSize(10); pdf.setFont("helvetica", "normal");
+        const lines = pdf.splitTextToSize(text, usableWidth);
+        for (const line of lines) {
+          if (y + 15 > pdf.internal.pageSize.getHeight() - margin) { pdf.addPage(); y = margin; }
+          pdf.text(line, margin, y); y += 15;
+        }
+        y += 3;
       }
-      pdf.text(line, margin, y);
-      y += size * 1.5;
     }
   }
 
-  pdf.setFontSize(20);
-  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(20); pdf.setFont("helvetica", "bold");
   const titleLines = pdf.splitTextToSize(title, usableWidth);
   for (const line of titleLines) {
-    if (y + 30 > pdf.internal.pageSize.getHeight() - margin) {
-      pdf.addPage();
-      y = margin;
-    }
-    pdf.text(line, margin, y);
-    y += 28;
+    if (y + 30 > pdf.internal.pageSize.getHeight() - margin) { pdf.addPage(); y = margin; }
+    pdf.text(line, margin, y); y += 28;
   }
   y += 12;
 
-  const plain = content.replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n").trim();
-  const paragraphs = plain.split(/\n\n+/);
-  for (const para of paragraphs) {
-    addText(para.trim(), 11, false);
-    y += 6;
-  }
+  addFormatted(content);
 
   return pdf.output("blob");
 }
