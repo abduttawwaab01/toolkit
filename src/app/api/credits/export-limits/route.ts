@@ -27,14 +27,20 @@ async function getExportLimits(role: string) {
       return s ? parseInt(s.value, 10) || fallback : fallback;
     } catch { return fallback; }
   };
+  const defaults: Record<string, { perDay: number; perWeek: number; perMonth: number; perYear: number; perExport: number; perMinute: number }> = {
+    GUEST: { perDay: 1, perWeek: 3, perMonth: 5, perYear: 30, perExport: 2, perMinute: 2 },
+    USER: { perDay: 3, perWeek: 15, perMonth: 50, perYear: 500, perExport: 1, perMinute: 1 },
+    ADMIN: { perDay: 9999, perWeek: 9999, perMonth: 9999, perYear: 9999, perExport: 0, perMinute: 0 },
+  };
+  const d = defaults[role] || defaults.USER;
   return {
     role,
-    freeExportsPerDay: await getInt(platformKey(role, "freePerDay"), 3),
-    freeExportsPerWeek: await getInt(platformKey(role, "freePerWeek"), 15),
-    freeExportsPerMonth: await getInt(platformKey(role, "freePerMonth"), 50),
-    freeExportsPerYear: await getInt(platformKey(role, "freePerYear"), 500),
-    creditsPerExport: await getInt(platformKey(role, "creditsPerExport"), 1),
-    creditsPerMinute: await getInt(platformKey(role, "creditsPerMinute"), 1),
+    freeExportsPerDay: await getInt(platformKey(role, "freePerDay"), d.perDay),
+    freeExportsPerWeek: await getInt(platformKey(role, "freePerWeek"), d.perWeek),
+    freeExportsPerMonth: await getInt(platformKey(role, "freePerMonth"), d.perMonth),
+    freeExportsPerYear: await getInt(platformKey(role, "freePerYear"), d.perYear),
+    creditsPerExport: await getInt(platformKey(role, "creditsPerExport"), d.perExport),
+    creditsPerMinute: await getInt(platformKey(role, "creditsPerMinute"), d.perMinute),
   };
 }
 

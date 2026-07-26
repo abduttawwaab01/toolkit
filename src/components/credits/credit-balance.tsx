@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Zap } from "lucide-react";
+import { Zap, Infinity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditPurchaseModal } from "./credit-purchase-modal";
 
@@ -33,8 +33,10 @@ function AnimatedNumber({ value }: { value: number }) {
 
 export function CreditBalance({ compact = true }: CreditBalanceProps) {
   const [balance, setBalance] = useState<number | null>(null);
+  const [role, setRole] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const isAdmin = role === "ADMIN";
 
   const fetchBalance = useCallback(async () => {
     try {
@@ -47,6 +49,7 @@ export function CreditBalance({ compact = true }: CreditBalanceProps) {
       if (res.ok) {
         const data = await res.json();
         setBalance(data.balance ?? data.creditsBalance ?? 0);
+        setRole(data.role ?? null);
         setAuthenticated(true);
       }
     } catch {
@@ -68,57 +71,73 @@ export function CreditBalance({ compact = true }: CreditBalanceProps) {
           <Zap size={14} className="shrink-0" />
           {authenticated === false ? (
             <span className="text-xs">0</span>
+          ) : isAdmin ? (
+            <Infinity size={16} className="shrink-0" />
           ) : balance !== null ? (
             <AnimatedNumber value={balance} />
           ) : (
             <span className="size-3 rounded-full bg-neon-cyan/30 animate-pulse" />
           )}
         </button>
+        {!isAdmin && (
+          <CreditPurchaseModal
+            open={modalOpen}
+            onClose={() => setModalOpen(false)}
+            onPurchased={fetchBalance}
+          />
+        )}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="glass rounded-2xl p-5 w-full">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm text-text-secondary">Credits</span>
+          <Zap size={16} className="text-neon-cyan" />
+        </div>
+        <div className="flex items-baseline gap-2 mb-3">
+          <span className="text-3xl font-bold font-display text-text-primary">
+            {isAdmin ? (
+              <span className="flex items-center gap-1.5"><Infinity size={28} /> Unlimited</span>
+            ) : balance !== null ? (
+              <AnimatedNumber value={balance} />
+            ) : (
+              "--"
+            )}
+          </span>
+          {!isAdmin && <span className="text-sm text-text-tertiary">remaining</span>}
+        </div>
+        {!isAdmin && (
+          <>
+            <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.min((balance ?? 0) / 100, 1) * 100}%` }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
+                className="h-full rounded-full bg-gradient-to-r from-neon-cyan to-neon-purple shadow-[0_0_8px_rgba(0,245,212,0.3)]"
+              />
+            </div>
+            <button
+              onClick={() => setModalOpen(true)}
+              className="mt-2 text-[11px] text-text-tertiary hover:text-neon-cyan/70 transition-colors cursor-pointer"
+            >
+              Click to purchase more credits
+            </button>
+          </>
+        )}
+        {isAdmin && (
+          <p className="mt-1 text-[11px] text-neon-cyan/70">Admin accounts have unlimited free exports</p>
+        )}
+      </div>
+      {!isAdmin && (
         <CreditPurchaseModal
           open={modalOpen}
           onClose={() => setModalOpen(false)}
           onPurchased={fetchBalance}
         />
-      </>
-    );
-  }
-
-  const maxBar = 100;
-  const barWidth = balance !== null ? Math.min(balance, maxBar) : 0;
-
-  return (
-    <>
-      <button
-        onClick={() => setModalOpen(true)}
-        className="glass rounded-2xl p-5 w-full text-left hover:ring-1 hover:ring-neon-cyan/20 transition-all duration-200 cursor-pointer group"
-      >
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm text-text-secondary">Credits</span>
-          <Zap size={16} className="text-neon-cyan group-hover:animate-pulse transition-all" />
-        </div>
-        <div className="flex items-baseline gap-2 mb-3">
-          <span className="text-3xl font-bold font-display text-text-primary">
-            {balance !== null ? <AnimatedNumber value={balance} /> : "--"}
-          </span>
-          <span className="text-sm text-text-tertiary">remaining</span>
-        </div>
-        <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${(barWidth / maxBar) * 100}%` }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-            className="h-full rounded-full bg-gradient-to-r from-neon-cyan to-neon-purple shadow-[0_0_8px_rgba(0,245,212,0.3)]"
-          />
-        </div>
-        <p className="mt-2 text-[11px] text-text-tertiary group-hover:text-neon-cyan/70 transition-colors">
-          Click to purchase more credits
-        </p>
-      </button>
-      <CreditPurchaseModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onPurchased={fetchBalance}
-      />
+      )}
     </>
   );
 }

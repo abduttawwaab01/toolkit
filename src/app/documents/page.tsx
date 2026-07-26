@@ -15,6 +15,7 @@ import {
   History,
   ArrowRightLeft,
   Download,
+  Printer,
   Loader2,
   Tag,
   X,
@@ -59,10 +60,35 @@ export default function DocumentsPage() {
     setVersions,
     isDirty,
     isSaving,
+    zoom,
     loadDocuments,
     saveCurrentDocument,
+    createDocument,
     reset,
   } = useDocumentStore();
+
+  const [dragOver, setDragOver] = useState(false);
+
+  const handleFileDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith(".txt") || f.name.endsWith(".md") || f.name.endsWith(".html"));
+    for (const file of files) {
+      const text = await file.text();
+      const ext = file.name.split(".").pop()?.toLowerCase() || "txt";
+      const format: DocumentFormat = ext === "md" ? "markdown" : ext === "html" ? "html" : "text";
+      const title = file.name.replace(/\.[^.]+$/, "");
+      const doc = createDocument({ title, format });
+      const content = format === "html" ? JSON.stringify({ type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text }] }] }) : text;
+      const updatedDoc = { ...doc, content: content as any, wordCount: text.trim() ? text.trim().split(/\s+/).length : 0 };
+      const docs = useDocumentStore.getState().documents.map((d) => d.id === doc.id ? updatedDoc : d);
+      localStorage.setItem("toolkit-documents", JSON.stringify(docs));
+      useDocumentStore.setState({ documents: docs });
+    }
+  }, [createDocument]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragOver(true); }, []);
+  const handleDragLeave = useCallback(() => setDragOver(false), []);
 
   const stats = documents.length > 0
     ? {
@@ -115,6 +141,18 @@ export default function DocumentsPage() {
     setIsSaving(true);
     saveCurrentDocument();
   }, [saveCurrentDocument, setIsSaving]);
+
+  const handlePrint = useCallback(() => {
+    const state = useDocumentStore.getState();
+    const content = state.rawContent;
+    const title = state.currentDocument?.title || "Document";
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(`<!DOCTYPE html><html><head><title>${title}</title><style>body{font-family:Georgia,serif;font-size:12pt;line-height:1.6;color:#222;max-width:800px;margin:40px auto;padding:0 40px;}</style></head><body>${content}</body></html>`);
+      printWindow.document.close();
+      printWindow.onload = () => printWindow.print();
+    }
+  }, []);
 
   const handleContentChange = useCallback(
     (content: Record<string, unknown> | string) => {
@@ -175,7 +213,19 @@ export default function DocumentsPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="flex flex-col h-full"
+            onDrop={handleFileDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
           >
+            {dragOver && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-neon-cyan/10 backdrop-blur-sm border-2 border-dashed border-neon-cyan/50 rounded-2xl">
+                <div className="text-center space-y-3">
+                  <FileText className="size-12 text-neon-cyan mx-auto" />
+                  <p className="text-lg font-display font-semibold text-neon-cyan">Drop files to import</p>
+                  <p className="text-sm text-text-secondary">Supports .txt, .md, .html files</p>
+                </div>
+              </div>
+            )}
             <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <a href="/" className="size-10 rounded-xl bg-glass-medium border border-border-subtle flex items-center justify-center text-text-tertiary hover:text-text-primary hover:bg-glass-heavy transition-colors">
@@ -274,6 +324,10 @@ export default function DocumentsPage() {
                       <Save className="size-3.5" />
                     )}
                     <span className="hidden sm:inline">Save</span>
+                  </Button>
+
+                  <Button variant="ghost" size="sm" onClick={handlePrint} title="Print" className="gap-1.5">
+                    <Printer className="size-3.5" />
                   </Button>
                 </>
               )}
@@ -404,7 +458,7 @@ export default function DocumentsPage() {
               <div className="flex-1 flex flex-col min-w-0">
                 {currentDocument ? (
                   <>
-                    <div className="flex-1 min-h-0">
+                    <div className="flex-1 min-h-0" style={{ zoom: `${zoom}%` }}>
                       <Editor
                         documentId={currentDocument.id}
                         format={currentDocument.format}

@@ -548,6 +548,15 @@ function ExportSettingsPanel({
             />
             <span className="text-[10px] text-text-secondary">Include Audio</span>
           </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.includeSubtitles}
+              onChange={(e) => update("includeSubtitles", e.target.checked)}
+              className="rounded border-border-subtle text-neon-cyan focus:ring-neon-cyan/30"
+            />
+            <span className="text-[10px] text-text-secondary">Burn-in Subtitles</span>
+          </label>
         </div>
       </Section>
 

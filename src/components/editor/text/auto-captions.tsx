@@ -24,15 +24,25 @@ export function AutoCaptions({ clipId }: AutoCaptionsProps) {
     }
 
     setGenerating(true);
-    setProgress("Transcribing audio...");
+    setProgress("Loading audio...");
 
     try {
+      // Fetch audio and convert to base64
+      const audioResp = await fetch(clip.src);
+      const audioBlob = await audioResp.blob();
+      const audioBuffer = await audioBlob.arrayBuffer();
+      const audioBase64 = btoa(
+        new Uint8Array(audioBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ""),
+      );
+
+      setProgress("Transcribing audio...");
+
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           feature: "transcribe",
-          audioUrl: clip.src,
+          audio: audioBase64,
           language,
         }),
       });

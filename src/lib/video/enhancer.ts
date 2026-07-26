@@ -189,6 +189,7 @@ export const QUALITY_PRESETS = [
   { label: "1080p (Full HD)", width: 1920, height: 1080, bitrate: 8000000 },
   { label: "2K (QHD)", width: 2560, height: 1440, bitrate: 16000000 },
   { label: "4K (UHD)", width: 3840, height: 2160, bitrate: 35000000 },
+  { label: "8K (Full Ultra HD)", width: 7680, height: 4320, bitrate: 80000000 },
 ];
 
 export const COMPRESSION_PRESETS = [

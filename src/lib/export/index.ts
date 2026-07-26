@@ -1,5 +1,7 @@
 import type { ExportSettings, ExportProgress, ExportStage } from "@/types/export";
 import { FORMAT_INFO, RESOLUTIONS } from "@/types/export";
+import type { Clip } from "@/types/editor";
+import { buildEffectChain } from "@/lib/audio-engine/player-processor";
 
 export interface ExportCallbacks {
   onProgress: (progress: ExportProgress) => void;
@@ -186,24 +188,57 @@ export class ExportEngine {
 
     const captureStream = compositeCanvas.captureStream(framerate);
 
+    // Apply audio effects via Web Audio API
     if (video && this.settings.includeAudio) {
       try {
-        const audioStream = (video as any).captureStream?.();
-        if (audioStream) {
-          const audioTracks = audioStream.getAudioTracks();
-          for (const track of audioTracks) {
-            captureStream.addTrack(track);
-          }
+        const audioCtx = new AudioContext();
+        const source = audioCtx.createMediaElementSource(video);
+        const state = (await import("@/lib/editor-store")).useEditorStore.getState();
+        const trackId = state.clips.find((c: Clip) => c.src === video.src)?.trackId;
+        const track = trackId ? state.tracks.find((t: { id: string }) => t.id === trackId) : null;
+        const effects = track?.audioEffects ?? [];
+
+        let outputNode: AudioNode = source;
+        if (effects.length > 0) {
+          const chain = buildEffectChain(audioCtx, source, effects);
+          outputNode = chain.output;
         }
+
+        const dest = audioCtx.createMediaStreamDestination();
+        outputNode.connect(dest);
+        const audioTracks = dest.stream.getAudioTracks();
+        for (const track of audioTracks) {
+          captureStream.addTrack(track);
+        }
+
+        // Keep audio context alive for duration
+        setTimeout(() => audioCtx.close(), state.project.duration * 1000 + 2000);
       } catch {
-        // Audio capture not supported
+        // Fallback: capture raw audio
+        try {
+          const audioStream = (video as any).captureStream?.();
+          if (audioStream) {
+            const audioTracks = audioStream.getAudioTracks();
+            for (const track of audioTracks) {
+              captureStream.addTrack(track);
+            }
+          }
+        } catch {}
       }
     }
 
-    const project = (await import("@/lib/editor-store")).useEditorStore.getState().project;
+    const state = (await import("@/lib/editor-store")).useEditorStore.getState();
+    const project = state.project;
+    const clips = state.clips;
     const totalDuration = project.duration;
     const frameInterval = 1000 / framerate;
     let currentFrame = 0;
+
+    // Load font for text rendering if needed
+    const hasTextClips = clips.some((c: Clip) => c.type === "text" && c.textContent);
+    if (hasTextClips) {
+      await document.fonts.ready;
+    }
 
     return new Promise<MediaStream>((resolve) => {
       const renderLoop = () => {
@@ -217,14 +252,120 @@ export class ExportEngine {
 
         ctx.clearRect(0, 0, width, height);
 
+        // Draw video frame
         if (video) {
-          video.currentTime = time;
+          try { video.currentTime = time; } catch {}
           ctx.drawImage(video, 0, 0, width, height);
         } else if (canvas) {
           ctx.drawImage(canvas, 0, 0, width, height);
         } else {
           ctx.fillStyle = "#0a0a0f";
           ctx.fillRect(0, 0, width, height);
+        }
+
+        // Render text overlays and subtitles (if burn-in enabled)
+        if (hasTextClips && this.settings.includeSubtitles) {
+          for (const clip of clips) {
+            if (clip.type !== "text" || !clip.textContent) continue;
+            const relTime = time - clip.startTime;
+            if (relTime < 0 || relTime > clip.duration) continue;
+
+            const ts = clip.textStyle;
+            let text = clip.textContent;
+            let fontSize = ts?.fontSize || 48;
+
+            // Check for active subtitle
+            const currentSub = clip.subtitles?.find(
+              (s: { start: number; end: number }) => relTime >= s.start && relTime <= s.end,
+            );
+            if (currentSub) {
+              text = currentSub.text;
+              fontSize = Math.min(fontSize, 36);
+            }
+
+            // Typewriter effect
+            const anim = clip.textAnimation;
+            if (anim?.type === "typewriter" && !currentSub) {
+              const stagger = anim.stagger || 0.03;
+              const charCount = Math.floor(relTime / stagger);
+              text = text.slice(0, Math.max(0, charCount));
+            }
+
+            ctx.save();
+            ctx.translate(clip.positionX || 0, clip.positionY || 0);
+            ctx.scale(clip.scale || 1, clip.scale || 1);
+            ctx.rotate(((clip.rotation || 0) * Math.PI) / 180);
+            ctx.globalAlpha = clip.opacity ?? 1;
+
+            const fontFamily = ts?.fontFamily || "'Inter', sans-serif";
+            ctx.font = `${ts?.bold ? "bold " : ""}${ts?.italic ? "italic " : ""}${fontSize}px ${fontFamily}`;
+            ctx.textAlign = (ts?.alignment || "center") as CanvasTextAlign;
+            ctx.textBaseline = "middle";
+
+            const x = width / 2;
+            const y = height / 2;
+
+            // Background
+            if (ts?.background) {
+              const bgAlpha = Math.round((ts.backgroundOpacity ?? 0.6) * 255).toString(16).padStart(2, "0");
+              ctx.fillStyle = ts.background + bgAlpha;
+              const metrics = ctx.measureText(text);
+              const padX = ts.paddingX || 16;
+              const padY = ts.paddingY || 8;
+              const bx = x - metrics.width / 2 - padX;
+              const by = y - fontSize / 2 - padY;
+              const bw = metrics.width + padX * 2;
+              const bh = fontSize + padY * 2;
+              const br = ts.borderRadius || 0;
+              if (br > 0) {
+                ctx.beginPath();
+                ctx.roundRect(bx, by, bw, bh, br);
+                ctx.fill();
+              } else {
+                ctx.fillRect(bx, by, bw, bh);
+              }
+            }
+
+            // Shadow
+            if (ts?.shadowColor) {
+              ctx.shadowColor = ts.shadowColor;
+              ctx.shadowBlur = ts.shadowBlur || 4;
+              ctx.shadowOffsetX = ts.shadowOffsetX || 2;
+              ctx.shadowOffsetY = ts.shadowOffsetY || 2;
+            }
+
+            // Stroke
+            if (ts?.strokeWidth && ts.strokeWidth > 0) {
+              ctx.strokeStyle = ts.strokeColor || "#000";
+              ctx.lineWidth = ts.strokeWidth;
+              ctx.strokeText(text, x, y);
+            }
+
+            ctx.fillStyle = ts?.color || "#ffffff";
+            ctx.fillText(text, x, y);
+
+            ctx.restore();
+          }
+        }
+
+        // Fade in/out overlays for all clips
+        for (const clip of clips) {
+          const relTime = time - clip.startTime;
+          if (relTime < 0 || relTime > clip.duration) continue;
+          // Fade in
+          if (clip.fadeIn && relTime < clip.fadeIn) {
+            ctx.save();
+            ctx.fillStyle = `rgba(0,0,0,${1 - relTime / clip.fadeIn})`;
+            ctx.fillRect(0, 0, width, height);
+            ctx.restore();
+          }
+          // Fade out
+          if (clip.fadeOut && clip.duration - relTime < clip.fadeOut) {
+            ctx.save();
+            ctx.fillStyle = `rgba(0,0,0,${1 - (clip.duration - relTime) / clip.fadeOut})`;
+            ctx.fillRect(0, 0, width, height);
+            ctx.restore();
+          }
         }
 
         currentFrame++;
@@ -308,6 +449,9 @@ export class ExportEngine {
 
     this.report("encoding-audio", 10);
 
+    // Get project duration first
+    const recordDuration = (await import("@/lib/editor-store")).useEditorStore.getState().project.duration;
+
     // Use MediaRecorder to capture audio
     const ctx = new AudioContext();
     const dest = ctx.createMediaStreamDestination();
@@ -347,11 +491,10 @@ export class ExportEngine {
       recorder.onerror = () => reject(new Error("Audio recording failed"));
       recorder.start();
 
-      // Record for duration of video
       setTimeout(() => {
         if (recorder.state === "recording") recorder.stop();
         ctx.close();
-      }, 35000);
+      }, recordDuration * 1000 + 1000);
     });
   }
 

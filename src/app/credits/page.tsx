@@ -17,6 +17,7 @@ import {
   ArrowRight,
   CreditCard,
   Package,
+  Infinity,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -74,6 +75,7 @@ const itemVariants = {
 
 export default function CreditsPage() {
   const [balance, setBalance] = useState<number | null>(null);
+  const [role, setRole] = useState<string | null>(null);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [bankDetail, setBankDetail] = useState<BankDetail | null>(null);
   const [requests, setRequests] = useState<PurchaseRequest[]>([]);
@@ -85,6 +87,7 @@ export default function CreditsPage() {
   const [submitted, setSubmitted] = useState(false);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
+  const isAdmin = role === "ADMIN";
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -98,6 +101,7 @@ export default function CreditsPage() {
       if (balRes.ok) {
         const d = await balRes.json();
         setBalance(d.balance ?? d.creditsBalance ?? 0);
+        setRole(d.role ?? null);
       } else {
         setBalance(0);
       }
@@ -207,22 +211,38 @@ export default function CreditsPage() {
               <div className="relative">
                 <div className="flex items-center gap-2 mb-4">
                   <Zap size={16} className="text-neon-cyan" />
-                  <span className="text-sm text-text-secondary">Current Balance</span>
+                  <span className="text-sm text-text-secondary">
+                    {isAdmin ? "Admin Account" : "Current Balance"}
+                  </span>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-5xl font-bold font-display text-text-primary">
-                    {balance !== null ? balance : "--"}
-                  </span>
-                  <span className="text-lg text-text-tertiary">credits</span>
+                  {isAdmin ? (
+                    <>
+                      <Infinity size={40} className="text-neon-cyan" />
+                      <span className="text-lg text-neon-cyan font-medium">Unlimited</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-5xl font-bold font-display text-text-primary">
+                        {balance !== null ? balance : "--"}
+                      </span>
+                      <span className="text-lg text-text-tertiary">credits</span>
+                    </>
+                  )}
                 </div>
-                <div className="w-full h-1.5 rounded-full bg-white/5 mt-4 overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.min((balance ?? 0) / 100, 1) * 100}%` }}
-                    transition={{ duration: 1, ease: "easeOut" }}
-                    className="h-full rounded-full bg-gradient-to-r from-neon-cyan to-neon-purple shadow-[0_0_10px_rgba(0,245,212,0.2)]"
-                  />
-                </div>
+                {!isAdmin && (
+                  <div className="w-full h-1.5 rounded-full bg-white/5 mt-4 overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${Math.min((balance ?? 0) / 100, 1) * 100}%` }}
+                      transition={{ duration: 1, ease: "easeOut" }}
+                      className="h-full rounded-full bg-gradient-to-r from-neon-cyan to-neon-purple shadow-[0_0_10px_rgba(0,245,212,0.2)]"
+                    />
+                  </div>
+                )}
+                {isAdmin && (
+                  <p className="mt-3 text-xs text-neon-cyan/70">You have unlimited free exports. No credits needed.</p>
+                )}
               </div>
             </GlassCard>
 
@@ -244,7 +264,7 @@ export default function CreditsPage() {
             </GlassCard>
           </motion.div>
 
-          {/* Packages */}
+          {!isAdmin && (
           <motion.div variants={itemVariants}>
             <div className="flex items-center gap-2 mb-4">
               <Package size={16} className="text-neon-cyan" />
@@ -319,9 +339,9 @@ export default function CreditsPage() {
               </div>
             )}
           </motion.div>
+          )}
 
-          {/* Purchase Form */}
-          {selected && (
+          {!isAdmin && selected && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}

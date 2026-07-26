@@ -28,6 +28,7 @@ export interface ExportSettings {
   rangeEnd?: number;
   includeAudio: boolean;
   includeVideo: boolean;
+  includeSubtitles: boolean;
   loop: number; // for GIF
   dither: boolean; // for GIF
 }
@@ -138,6 +139,7 @@ export function defaultExportSettings(): ExportSettings {
     scope: "entire",
     includeAudio: true,
     includeVideo: true,
+    includeSubtitles: true,
     loop: 0,
     dither: true,
   };

@@ -190,16 +190,25 @@ export function DocumentList({ onEdit }: { onEdit?: (doc: Document) => void }) {
   }, [deleteDocument]);
 
   const handleExport = useCallback((doc: Document) => {
-    const raw = typeof doc.content === "string" ? doc.content : JSON.stringify(doc.content, null, 2);
-    const mime = doc.format === "html" ? "text/html" : doc.format === "markdown" ? "text/markdown" : "text/plain";
-    const ext = doc.format === "markdown" ? "md" : "txt";
-    const blob = new Blob([raw], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${doc.title}.${ext}`;
-    a.click();
-    URL.revokeObjectURL(url);
+    import("@/lib/document-convert").then(({ convertContent }) => {
+      let raw = typeof doc.content === "string" ? doc.content : JSON.stringify(doc.content, null, 2);
+      // Convert rich/HTML content to readable text for export
+      if (doc.format === "rich") {
+        try {
+          JSON.parse(raw);
+          raw = convertContent("rich", "markdown", raw);
+        } catch { /* use raw */ }
+      }
+      const mime = doc.format === "html" ? "text/html" : doc.format === "markdown" || doc.format === "rich" ? "text/markdown" : "text/plain";
+      const ext = doc.format === "rich" ? "md" : doc.format === "markdown" ? "md" : "txt";
+      const blob = new Blob([raw], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${doc.title}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
   }, []);
 
   return (

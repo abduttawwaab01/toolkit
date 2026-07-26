@@ -97,11 +97,11 @@ export function VideoEnhancerPanel() {
         recorder!.onstop = () => {
           const blob = new Blob(chunks, { type: recorder!.mimeType });
           const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `${clip!.name.replace(/\.[^.]+$/, "")}_enhanced.webm`;
-          a.click();
-          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          // Replace the clip source in the project
+          const store = useEditorStore.getState();
+          if (clip) {
+            store.updateClip(clip.id, { src: url, name: `${clip.name.replace(/\.[^.]+$/, "")}_enhanced.webm` });
+          }
           toast.success("Enhancement complete", `Upscaled to ${targetQuality.label}`);
           setProcessing(false);
           processingRef.current = false;

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { BarChart3, Users, Clock, Puzzle, Settings, ScrollText, Megaphone, CreditCard } from "lucide-react";
+import { BarChart3, Users, Clock, Puzzle, Settings, ScrollText, Megaphone, CreditCard, ArrowLeft, Video, FileText, Zap } from "lucide-react";
 import { AdminOverview } from "@/components/admin/admin-overview";
 import { AdminUsers } from "@/components/admin/admin-users";
 import { AdminStorageConfig } from "@/components/admin/admin-storage-config";
@@ -43,6 +43,30 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-surface">
       <div className="section-padding max-width-container py-8">
+        {/* Top nav */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <a href="/" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-tertiary hover:text-text-secondary glass rounded-lg transition-colors">
+              <ArrowLeft size={14} />
+              Back to App
+            </a>
+          </div>
+          <div className="flex items-center gap-2">
+            <a href="/editor" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-neon-cyan glass rounded-lg transition-colors">
+              <Video size={14} />
+              Editor
+            </a>
+            <a href="/documents" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-neon-cyan glass rounded-lg transition-colors">
+              <FileText size={14} />
+              Documents
+            </a>
+            <a href="/credits" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-neon-cyan glass rounded-lg transition-colors">
+              <Zap size={14} />
+              Credits
+            </a>
+          </div>
+        </div>
+
         <div className="mb-8">
           <h1 className="text-3xl font-bold font-display mb-2">Admin Dashboard</h1>
           <p className="text-text-secondary">Full control over users, limits, features, and platform configuration.</p>

@@ -17,6 +17,9 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { cn, formatBytes } from "@/lib/utils";
 import { useDocumentStore } from "@/lib/document-store";
 import { convertContent } from "@/lib/document-convert";
+import { useExportCredits } from "@/hooks/use-export-credits";
+import { CreditSpendDialog } from "@/components/credits/credit-spend-dialog";
+import { CreditPurchaseModal } from "@/components/credits/credit-purchase-modal";
 
 interface ExportFormat {
   id: string;
@@ -61,13 +64,33 @@ const EXPORT_FORMATS: ExportFormat[] = [
     description: "Web-ready HTML document",
   },
   {
+    id: "pdf",
+    name: "PDF",
+    ext: ".pdf",
+    mime: "application/pdf",
+    icon: FileText,
+    color: "text-neon-cyan",
+    borderColor: "border-neon-cyan",
+    description: "Print to PDF via browser dialog",
+  },
+  {
+    id: "json",
+    name: "JSON",
+    ext: ".json",
+    mime: "application/json",
+    icon: FileCode,
+    color: "text-neon-pink",
+    borderColor: "border-neon-pink",
+    description: "Raw document data as JSON",
+  },
+  {
     id: "docx",
     name: "Word Document",
     ext: ".docx",
     mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     icon: FileText,
-    color: "text-neon-cyan",
-    borderColor: "border-neon-cyan",
+    color: "text-neon-purple",
+    borderColor: "border-neon-purple",
     description: "Microsoft Word compatible",
   },
 ];
@@ -83,6 +106,7 @@ function generateDocxContent(content: string, title: string): Blob {
 
 export function DocumentExport() {
   const { currentDocument, rawContent, setActivePanel } = useDocumentStore();
+  const credits = useExportCredits();
   const [selectedFormat, setSelectedFormat] = useState<string>("html");
   const [fileName, setFileName] = useState(currentDocument?.title ?? "document");
   const [loading, setLoading] = useState(false);
@@ -94,6 +118,7 @@ export function DocumentExport() {
     const charBytes = new TextEncoder().encode(rawContent).length;
     if (selectedFormat === "html") return charBytes * 1.5;
     if (selectedFormat === "docx") return charBytes * 3.5;
+    if (selectedFormat === "json") return charBytes * 1.2;
     if (selectedFormat === "md") return charBytes;
     return charBytes;
   }, [rawContent, selectedFormat]);
@@ -127,7 +152,33 @@ export function DocumentExport() {
       }
 
       let blob: Blob;
-      if (format.id === "docx") {
+      if (format.id === "pdf") {
+        // Generate styled HTML for print
+        const printHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${fileName}</title>
+<style>body{font-family:Georgia,serif;font-size:12pt;line-height:1.6;color:#222;max-width:800px;margin:0 auto;padding:40px;}
+h1{font-size:24pt;margin-top:24pt;margin-bottom:12pt;}
+h2{font-size:18pt;margin-top:18pt;margin-bottom:9pt;}
+h3{font-size:14pt;margin-top:14pt;margin-bottom:7pt;}
+p{margin:0 0 6pt 0;}
+pre{background:#f5f5f5;padding:12pt;border-radius:4pt;font-size:10pt;overflow-x:auto;}
+code{background:#f0f0f0;padding:1pt 3pt;border-radius:2pt;font-size:10pt;}
+blockquote{border-left:3pt solid #ccc;padding-left:12pt;margin:12pt 0;color:#555;}
+table{border-collapse:collapse;width:100%;margin:12pt 0;}
+th,td{border:1pt solid #ddd;padding:6pt 8pt;text-align:left;}
+th{background:#f5f5f5;}
+img{max-width:100%;}
+</style></head><body>${content}</body></html>`;
+        const printBlob = new Blob([printHtml], { type: "text/html" });
+        const printUrl = URL.createObjectURL(printBlob);
+        const w = window.open(printUrl, "_blank");
+        if (w) {
+          w.onload = () => { w.print(); URL.revokeObjectURL(printUrl); };
+        }
+        setExported(true);
+        setTimeout(() => setExported(false), 3000);
+        setLoading(false);
+        return;
+      } else if (format.id === "docx") {
         blob = generateDocxContent(content, fileName);
       } else {
         blob = new Blob([content], { type: format.mime });
@@ -288,6 +339,21 @@ export function DocumentExport() {
           </Button>
         </div>
       </GlassCard>
+
+      {credits.showSpendDialog && (
+        <CreditSpendDialog
+          feature="export"
+          featureLabel="Document Export"
+          creditsCost={credits.pendingCost}
+          onSpend={credits.confirmSpend}
+          onCancel={credits.cancelSpend}
+          loading={credits.spending}
+        />
+      )}
+      <CreditPurchaseModal
+        open={credits.showPurchaseModal}
+        onClose={() => credits.setShowPurchaseModal(false)}
+      />
     </motion.div>
   );
 }

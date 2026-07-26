@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useEditorStore } from "@/lib/editor-store";
 import { AUDIO_EFFECT_DEFINITIONS, getAudioEffectDefinition } from "@/lib/effects/audio-effects";
 import type { AudioEffectType } from "@/types/editor";
@@ -7,6 +8,7 @@ import type { AudioEffectType } from "@/types/editor";
 export function AudioProcessing() {
   const { selectedTrackId, tracks, addAudioEffectToTrack, removeAudioEffectFromTrack, updateAudioEffectParam, toggleAudioEffect } = useEditorStore();
   const track = tracks.find((t) => t.id === selectedTrackId);
+  const [statusMsg, setStatusMsg] = useState("");
 
   if (!track) {
     return (
@@ -84,6 +86,60 @@ export function AudioProcessing() {
           </div>
         );
       })}
+
+      {/* One-click audio tools */}
+      {track && (
+        <div className="pt-1 space-y-1">
+          <label className="text-[9px] text-text-tertiary block mb-1">Quick Tools</label>
+          <div className="grid grid-cols-2 gap-1">
+            <button
+              onClick={() => {
+                if (!track.audioEffects.some((fx) => fx.type === "noise-removal")) {
+                  addAudioEffectToTrack(track.id, "noise-removal");
+                  setStatusMsg("Noise removal added — adjust sliders above");
+                } else {
+                  const fx = track.audioEffects.find((e) => e.type === "noise-removal");
+                  if (fx) toggleAudioEffect(track.id, fx.id);
+                }
+              }}
+              className="glass rounded-lg px-2 py-1.5 text-left text-[10px] text-text-secondary hover:text-text-primary hover:bg-glass-medium transition-colors border border-border-subtle"
+            >
+              🌊 Noise Removal
+            </button>
+            <button
+              onClick={() => {
+                if (!track.audioEffects.some((fx) => fx.type === "bg-music-removal")) {
+                  addAudioEffectToTrack(track.id, "bg-music-removal");
+                  setStatusMsg("Vocal isolation added — adjust sliders above");
+                } else {
+                  const fx = track.audioEffects.find((e) => e.type === "bg-music-removal");
+                  if (fx) toggleAudioEffect(track.id, fx.id);
+                }
+              }}
+              className="glass rounded-lg px-2 py-1.5 text-left text-[10px] text-text-secondary hover:text-text-primary hover:bg-glass-medium transition-colors border border-border-subtle"
+            >
+              🎵 Vocal Isolation
+            </button>
+            <button
+              onClick={() => {
+                if (!track.audioEffects.some((fx) => fx.type === "tone-enhancer")) {
+                  addAudioEffectToTrack(track.id, "tone-enhancer");
+                  setStatusMsg("Tone enhancer added — adjust sliders above");
+                } else {
+                  const fx = track.audioEffects.find((e) => e.type === "tone-enhancer");
+                  if (fx) toggleAudioEffect(track.id, fx.id);
+                }
+              }}
+              className="glass rounded-lg px-2 py-1.5 text-left text-[10px] text-text-secondary hover:text-text-primary hover:bg-glass-medium transition-colors border border-border-subtle"
+            >
+              🎛 Tone Enhancer
+            </button>
+          </div>
+          {statusMsg && (
+            <p className="text-[9px] text-neon-cyan">{statusMsg}</p>
+          )}
+        </div>
+      )}
 
       {/* Add effect */}
       {availableEffects.length > 0 && (
