@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Undo2, Redo2, Scissors, Play, Square,
   Music, Type, Image, Wand2, Download, Sparkles,
   Magnet, Plus, Trash2, GripVertical, Keyboard, Settings,
-  PanelLeft, PanelRight, ChevronDown, ChevronUp, ArrowLeft,
+  PanelLeft, PanelRight, ChevronDown, ChevronUp, ArrowLeft, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEditorStore } from "@/lib/editor-store";
@@ -50,7 +50,7 @@ function PanelFallback({ label }: { label: string }) {
 export default function EditorPage() {
   const {
     isPlaying, togglePlay, undo, redo, selectedClipId, snapEnabled, toggleSnap,
-    activePanel, setActivePanel, project, tracks, selectedTrackId, selectTrack,
+    activePanel, setActivePanel, project, setProject, tracks, selectedTrackId, selectTrack,
     addTrack, removeTrack, clips, removeClip, setShowExportDialog,
   } = useEditorStore();
 
@@ -180,9 +180,7 @@ export default function EditorPage() {
               <ArrowLeft size={14} />
             </a>
             <span className="font-display font-bold gradient-text text-sm mr-2">ToolKit</span>
-            <span className="text-xs text-text-tertiary px-2 py-0.5 glass rounded-md max-w-[120px] truncate hidden sm:block">
-              {project.name}
-            </span>
+            <ProjectNameEditor name={project.name} onUpdate={(name) => setProject({ name })} />
             <SaveIndicator status={saveStatus} />
           </div>
 
@@ -521,6 +519,53 @@ function ClipsList({ clips, selectedClipId, tracks }: { clips: any[]; selectedCl
         </button>
       ))}
     </div>
+  );
+}
+
+function ProjectNameEditor({ name, onUpdate }: { name: string; onUpdate: (name: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const handleSubmit = () => {
+    const trimmed = value.trim();
+    if (trimmed && trimmed !== name) {
+      onUpdate(trimmed);
+    } else {
+      setValue(name);
+    }
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={handleSubmit}
+        onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); if (e.key === "Escape") { setValue(name); setEditing(false); } }}
+        className="text-xs text-text-primary px-2 py-0.5 glass rounded-md max-w-[140px] hidden sm:block border border-neon-cyan/40 outline-none"
+      />
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      className="flex items-center gap-1 text-xs text-text-tertiary px-2 py-0.5 glass rounded-md max-w-[140px] truncate hidden sm:block hover:text-text-primary hover:border-neon-cyan/20 transition-colors group"
+      title="Click to rename project"
+    >
+      <span className="truncate">{name}</span>
+      <Pencil size={10} className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-text-tertiary" />
+    </button>
   );
 }
 

@@ -51,42 +51,91 @@ export function useMediaUpload() {
       activeRef.current.set(fileId, controller);
 
       try {
-        const formData = new FormData();
-        formData.append("file", file);
-        if (userId) formData.append("userId", userId);
+        // For files over 50MB, use presigned upload URL to bypass server body size limit
+        const LARGE_FILE_THRESHOLD = 50 * 1024 * 1024;
+        let result: { id: string; url: string };
 
-        const xhr = new XMLHttpRequest();
+        if (file.size > LARGE_FILE_THRESHOLD) {
+          // Step 1: Get presigned upload URL
+          const urlRes = await fetch("/api/media/upload-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fileName: file.name,
+              mimeType: file.type,
+              fileSize: file.size,
+              projectId: userId,
+            }),
+          });
+          if (!urlRes.ok) {
+            const errData = await urlRes.json().catch(() => ({}));
+            throw new Error(errData.error || "Failed to get upload URL");
+          }
+          const { uploadUrl, id } = await urlRes.json();
 
-        const result = await new Promise<{ id: string; url: string }>((resolve, reject) => {
-          xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable) {
-              const pct = Math.round((e.loaded / e.total) * 100);
-              setUploads((prev) =>
-                prev.map((u) => (u.fileId === fileId ? { ...u, progress: pct } : u)),
-              );
-            }
-          };
-
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              resolve(JSON.parse(xhr.responseText));
-            } else {
-              try {
-                const err = JSON.parse(xhr.responseText);
-                reject(new Error(err.error || "Upload failed"));
-              } catch {
-                reject(new Error(`Upload failed with status ${xhr.status}`));
+          // Step 2: Upload directly to R2 with XHR for progress tracking
+          const xhr = new XMLHttpRequest();
+          await new Promise<void>((resolve, reject) => {
+            xhr.upload.onprogress = (e) => {
+              if (e.lengthComputable) {
+                const pct = Math.round((e.loaded / e.total) * 100);
+                setUploads((prev) =>
+                  prev.map((u) => (u.fileId === fileId ? { ...u, progress: pct } : u)),
+                );
               }
-            }
-          };
+            };
+            xhr.onload = () => {
+              if (xhr.status >= 200 && xhr.status < 300) resolve();
+              else reject(new Error(`Direct upload failed with status ${xhr.status}`));
+            };
+            xhr.onerror = () => reject(new Error("Network error during direct upload"));
+            xhr.onabort = () => reject(new Error("Upload cancelled"));
+            xhr.open("PUT", uploadUrl);
+            xhr.setRequestHeader("Content-Type", file.type);
+            controller.signal.addEventListener("abort", () => xhr.abort());
+            xhr.send(file);
+          });
 
-          xhr.onerror = () => reject(new Error("Network error during upload"));
-          xhr.onabort = () => reject(new Error("Upload cancelled"));
+          result = { id, url: (await urlRes.json()).publicUrl || uploadUrl.split("?")[0] };
+        } else {
+          // Small files: upload through server as before
+          const formData = new FormData();
+          formData.append("file", file);
+          if (userId) formData.append("userId", userId);
 
-          xhr.open("POST", "/api/media/upload");
-          controller.signal.addEventListener("abort", () => xhr.abort());
-          xhr.send(formData);
-        });
+          const xhr = new XMLHttpRequest();
+
+          result = await new Promise<{ id: string; url: string }>((resolve, reject) => {
+            xhr.upload.onprogress = (e) => {
+              if (e.lengthComputable) {
+                const pct = Math.round((e.loaded / e.total) * 100);
+                setUploads((prev) =>
+                  prev.map((u) => (u.fileId === fileId ? { ...u, progress: pct } : u)),
+                );
+              }
+            };
+
+            xhr.onload = () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                resolve(JSON.parse(xhr.responseText));
+              } else {
+                try {
+                  const err = JSON.parse(xhr.responseText);
+                  reject(new Error(err.error || "Upload failed"));
+                } catch {
+                  reject(new Error(`Upload failed with status ${xhr.status}`));
+                }
+              }
+            };
+
+            xhr.onerror = () => reject(new Error("Network error during upload"));
+            xhr.onabort = () => reject(new Error("Upload cancelled"));
+
+            xhr.open("POST", "/api/media/upload");
+            controller.signal.addEventListener("abort", () => xhr.abort());
+            xhr.send(formData);
+          });
+        }
 
         setUploads((prev) =>
           prev.map((u) =>

@@ -37,6 +37,18 @@ export async function getSignedDownloadUrl(key: string, expiresIn = 3600) {
   );
 }
 
+export async function getSignedUploadUrl(key: string, contentType: string, expiresIn = 3600) {
+  return getSignedUrl(
+    r2,
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      ContentType: contentType,
+    }),
+    { expiresIn },
+  );
+}
+
 export function getPublicUrl(key: string) {
   return `${PUBLIC_URL}/${key}`;
 }
