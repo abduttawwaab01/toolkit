@@ -3,7 +3,7 @@
 import { useState, FormEvent } from "react";
 import { signIn, getSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Zap, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Zap, Loader2, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { APP_NAME } from "@/lib/constants";
@@ -12,6 +12,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,13 +111,23 @@ export default function LoginPage() {
             onChange={(e) => setEmail(e.target.value)}
             className="w-full glass rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-neon-cyan/30 transition-colors"
           />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full glass rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-neon-cyan/30 transition-colors"
-          />
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full glass rounded-xl px-4 py-3 pr-10 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-neon-cyan/30 transition-colors"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary transition-colors"
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
 
           {error && (
             <div className="flex items-center gap-2 text-sm text-neon-pink bg-neon-pink/10 border border-neon-pink/20 rounded-xl px-4 py-3">

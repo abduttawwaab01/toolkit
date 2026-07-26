@@ -3,22 +3,9 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Plus,
-  ArrowLeft,
-  Save,
-  PanelLeftClose,
-  PanelLeft,
-  FileText,
-  Code2,
-  FileType,
-  FileCode,
-  History,
-  ArrowRightLeft,
-  Download,
-  Printer,
-  Loader2,
-  Tag,
-  X,
+  Plus, ArrowLeft, Save, PanelLeftClose, PanelLeft, FileText,
+  Code2, FileType, FileCode, History, ArrowRightLeft, Download,
+  Printer, Loader2, Tag, X, FileUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, formatBytes } from "@/lib/utils";
@@ -30,6 +17,8 @@ import { DocumentConverter } from "@/components/documents/document-converter";
 import { DocumentVersions } from "@/components/documents/document-versions";
 import { DocumentExport } from "@/components/documents/document-export";
 import { Editor } from "@/components/documents/editor";
+import { FileUploadZone } from "@/components/documents/file-upload-zone";
+import { importFile, type ImportResult } from "@/lib/document-import-service";
 import type { Document, DocumentFormat } from "@/types/document";
 
 const FORMAT_CONFIG: Record<DocumentFormat, { label: string; color: string; bg: string; icon: React.ElementType }> = {
@@ -66,29 +55,6 @@ export default function DocumentsPage() {
     createDocument,
     reset,
   } = useDocumentStore();
-
-  const [dragOver, setDragOver] = useState(false);
-
-  const handleFileDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith(".txt") || f.name.endsWith(".md") || f.name.endsWith(".html"));
-    for (const file of files) {
-      const text = await file.text();
-      const ext = file.name.split(".").pop()?.toLowerCase() || "txt";
-      const format: DocumentFormat = ext === "md" ? "markdown" : ext === "html" ? "html" : "text";
-      const title = file.name.replace(/\.[^.]+$/, "");
-      const doc = createDocument({ title, format });
-      const content = format === "html" ? JSON.stringify({ type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text }] }] }) : text;
-      const updatedDoc = { ...doc, content: content as any, wordCount: text.trim() ? text.trim().split(/\s+/).length : 0 };
-      const docs = useDocumentStore.getState().documents.map((d) => d.id === doc.id ? updatedDoc : d);
-      localStorage.setItem("toolkit-documents", JSON.stringify(docs));
-      useDocumentStore.setState({ documents: docs });
-    }
-  }, [createDocument]);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragOver(true); }, []);
-  const handleDragLeave = useCallback(() => setDragOver(false), []);
 
   const stats = documents.length > 0
     ? {
@@ -137,6 +103,29 @@ export default function DocumentsPage() {
     setSidebarTab("info");
   }, [setCurrentDocument, setEditorContent, setRawContent, setWordCount, setCharCount, setIsDirty, setVersions]);
 
+  const handleImportResult = useCallback((result: ImportResult) => {
+    const content = typeof result.content === "string" && (result.format === "rich")
+      ? (() => { try { return JSON.parse(result.content) as Record<string, unknown>; } catch { return result.content; } })()
+      : result.content;
+    const doc = createDocument({ title: result.title, format: result.format });
+    const updatedDoc: Document = {
+      ...doc,
+      content: content as Record<string, unknown>,
+      wordCount: typeof content === "string" ? content.trim().split(/\s+/).filter(Boolean).length : 0,
+      mimeType: result.mimeType,
+    };
+    const docs = useDocumentStore.getState().documents.map((d) => d.id === doc.id ? updatedDoc : d);
+    localStorage.setItem("toolkit-documents", JSON.stringify(docs));
+    useDocumentStore.setState({ documents: docs, currentDocument: updatedDoc });
+    setEditorContent(content as Record<string, unknown>);
+    const raw = typeof content === "string" ? content : JSON.stringify(content, null, 2);
+    setRawContent(raw);
+    setWordCount(updatedDoc.wordCount || 0);
+    setCharCount(raw.length);
+    setIsDirty(false);
+    setView("editor");
+  }, [createDocument, setEditorContent, setRawContent, setWordCount, setCharCount, setIsDirty]);
+
   const handleSave = useCallback(() => {
     setIsSaving(true);
     saveCurrentDocument();
@@ -162,35 +151,29 @@ export default function DocumentsPage() {
         setRawContent(content);
       }
       setIsDirty(true);
-
       const raw = typeof content === "string" ? content : JSON.stringify(content);
       const words = raw.trim() ? raw.trim().split(/\s+/).length : 0;
       const chars = raw.length;
       setWordCount(words);
       setCharCount(chars);
-
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = setTimeout(() => {
-        saveCurrentDocument();
-      }, 3000);
+      saveTimeoutRef.current = setTimeout(() => { saveCurrentDocument(); }, 3000);
     },
     [setEditorContent, setRawContent, setIsDirty, setWordCount, setCharCount, saveCurrentDocument],
   );
 
   const handleBack = useCallback(() => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    if (isDirty) {
-      saveCurrentDocument();
-    }
-    reset();
-    loadDocuments();
-    setView("dashboard");
+    if (isDirty) saveCurrentDocument();
+    requestAnimationFrame(() => {
+      reset();
+      loadDocuments();
+      setView("dashboard");
+    });
   }, [isDirty, saveCurrentDocument, reset, loadDocuments]);
 
   useEffect(() => {
-    return () => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    };
+    return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
   }, []);
 
   const sidebarItems = [
@@ -213,24 +196,15 @@ export default function DocumentsPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="flex flex-col h-full"
-            onDrop={handleFileDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
           >
-            {dragOver && (
-              <div className="absolute inset-0 z-50 flex items-center justify-center bg-neon-cyan/10 backdrop-blur-sm border-2 border-dashed border-neon-cyan/50 rounded-2xl">
-                <div className="text-center space-y-3">
-                  <FileText className="size-12 text-neon-cyan mx-auto" />
-                  <p className="text-lg font-display font-semibold text-neon-cyan">Drop files to import</p>
-                  <p className="text-sm text-text-secondary">Supports .txt, .md, .html files</p>
-                </div>
-              </div>
-            )}
             <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <a href="/" className="size-10 rounded-xl bg-glass-medium border border-border-subtle flex items-center justify-center text-text-tertiary hover:text-text-primary hover:bg-glass-heavy transition-colors">
+                <button
+                  onClick={() => window.history.back()}
+                  className="size-10 rounded-xl bg-glass-medium border border-border-subtle flex items-center justify-center text-text-tertiary hover:text-text-primary hover:bg-glass-heavy transition-colors"
+                >
                   <ArrowLeft className="size-4" />
-                </a>
+                </button>
                 <div className="size-10 rounded-xl bg-gradient-to-br from-neon-cyan/20 to-neon-purple/20 border border-neon-cyan/20 flex items-center justify-center">
                   <FileText className="size-5 text-neon-cyan" />
                 </div>
@@ -238,7 +212,7 @@ export default function DocumentsPage() {
                   <h1 className="text-xl font-display font-bold text-text-primary">
                     <span className="gradient-text">Documents</span>
                   </h1>
-                  <p className="text-xs text-text-tertiary">Create, edit, and convert documents</p>
+                  <p className="text-xs text-text-tertiary">Create, edit, convert and export documents</p>
                 </div>
               </div>
               <Button variant="neon" size="sm" onClick={() => setShowCreateDialog(true)}>
@@ -261,6 +235,10 @@ export default function DocumentsPage() {
                 ))}
               </div>
             )}
+
+            <div className="px-6 py-4 border-b border-border-subtle/30">
+              <FileUploadZone onImport={handleImportResult} disabled={false} />
+            </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-4">
               <DocumentList onEdit={handleSelectDocument} />

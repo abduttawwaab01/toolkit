@@ -1,5 +1,7 @@
 export type DocumentFormat = 'rich' | 'markdown' | 'text' | 'html';
-export type DocumentExtension = 'html' | 'md' | 'txt' | 'pdf' | 'docx' | 'rtf';
+export type DocumentExtension = 'html' | 'md' | 'txt' | 'pdf' | 'docx' | 'doc' | 'rtf' | 'odt' | 'image';
+
+export type ImportSourceType = 'file-pdf' | 'file-docx' | 'file-doc' | 'file-rtf' | 'file-odt' | 'file-txt' | 'file-md' | 'file-html' | 'file-image';
 
 export interface Document {
   id: string;
