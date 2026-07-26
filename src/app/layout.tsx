@@ -7,6 +7,7 @@ import "@/styles/globals.css";
 export const metadata: Metadata = {
   title: { default: `${APP_NAME} — AI Video & Audio Editing Platform`, template: `%s | ${APP_NAME}` },
   description: APP_DESCRIPTION,
+  icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
   openGraph: { title: APP_NAME, description: APP_DESCRIPTION, siteName: APP_NAME, type: "website" },
   twitter: { card: "summary_large_image", title: APP_NAME, description: APP_DESCRIPTION },
 };
