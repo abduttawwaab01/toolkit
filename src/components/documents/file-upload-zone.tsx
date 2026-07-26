@@ -2,9 +2,9 @@
 
 import { useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, FileText, AlertCircle, Loader2, CheckCircle2, X, FileType, FileCode, ImageIcon } from "lucide-react";
+import { Upload, FileText, AlertCircle, Loader2, CheckCircle2, X, FileType, FileCode, ImageIcon, Eye, FileSearch } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isFileSupported, getFileLabel, importFile, getSupportedFileTypes, type ImportResult } from "@/lib/document-import-service";
+import { isFileSupported, isVisualFileType, getFileLabel, importFile, importVisualPdf, importVisualDocx, getSupportedFileTypes, type ImportResult } from "@/lib/document-import-service";
 
 interface FileUploadZoneProps {
   onImport: (result: ImportResult) => void;
@@ -28,7 +28,35 @@ export function FileUploadZone({ onImport, disabled }: FileUploadZoneProps) {
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const processFile = useCallback(async (file: File, visualMode: boolean) => {
+    setImporting(true);
+    setError(null);
+    setSuccess(null);
+    setPendingFile(null);
+
+    try {
+      let result: ImportResult;
+      if (visualMode) {
+        const ext = file.name.split(".").pop()?.toLowerCase() || "";
+        if (ext === "pdf") {
+          result = await importVisualPdf(file);
+        } else {
+          result = await importVisualDocx(file);
+        }
+      } else {
+        result = await importFile(file);
+      }
+      setSuccess(`Imported ${getFileLabel(file)}${visualMode ? " (visual edit)" : ""}`);
+      onImport(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to import file");
+    } finally {
+      setImporting(false);
+    }
+  }, [onImport]);
 
   const handleFile = useCallback(async (file: File) => {
     if (importing) return;
@@ -40,17 +68,13 @@ export function FileUploadZone({ onImport, disabled }: FileUploadZoneProps) {
       return;
     }
 
-    setImporting(true);
-    try {
-      const result = await importFile(file);
-      setSuccess(`Imported ${getFileLabel(file)}`);
-      onImport(result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to import file");
-    } finally {
-      setImporting(false);
+    if (isVisualFileType(file)) {
+      setPendingFile(file);
+      return;
     }
-  }, [importing, onImport]);
+
+    await processFile(file, false);
+  }, [importing, processFile]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -138,6 +162,62 @@ export function FileUploadZone({ onImport, disabled }: FileUploadZoneProps) {
           )}
         </AnimatePresence>
       </motion.div>
+
+      {/* Import mode choice dialog */}
+      <AnimatePresence>
+        {pendingFile && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+            onClick={() => setPendingFile(null)}
+          >
+            <div
+              className="bg-surface-elevated rounded-2xl border border-border-subtle p-6 max-w-sm w-full mx-4 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-sm font-semibold text-text-primary mb-1">Import {pendingFile.name}</h3>
+              <p className="text-xs text-text-tertiary mb-4">Choose how you want to import this document:</p>
+
+              <div className="space-y-2">
+                <button
+                  onClick={() => processFile(pendingFile, true)}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl border border-neon-cyan/30 bg-neon-cyan/5 hover:bg-neon-cyan/10 transition-colors text-left group"
+                >
+                  <div className="size-10 rounded-lg bg-neon-cyan/10 flex items-center justify-center shrink-0 group-hover:bg-neon-cyan/20 transition-colors">
+                    <Eye size={18} className="text-neon-cyan" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-text-primary">Visual Edit</p>
+                    <p className="text-[10px] text-text-tertiary">Preserve original layout. Edit text in place.</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => processFile(pendingFile, false)}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl border border-border-subtle hover:bg-glass-medium transition-colors text-left group"
+                >
+                  <div className="size-10 rounded-lg bg-glass-medium flex items-center justify-center shrink-0 group-hover:bg-glass-light transition-colors">
+                    <FileSearch size={18} className="text-text-secondary" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-text-primary">Text Extract</p>
+                    <p className="text-[10px] text-text-tertiary">Extract content only. Edit as rich text.</p>
+                  </div>
+                </button>
+              </div>
+
+              <button
+                onClick={() => setPendingFile(null)}
+                className="mt-3 w-full text-[10px] text-text-tertiary hover:text-text-secondary transition-colors py-1"
+              >
+                Cancel
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {(error || success) && (

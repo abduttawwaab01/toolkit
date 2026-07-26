@@ -1,14 +1,56 @@
-export type DocumentFormat = 'rich' | 'markdown' | 'text' | 'html';
+export type DocumentFormat = 'rich' | 'markdown' | 'text' | 'html' | 'visual';
 export type DocumentExtension = 'html' | 'md' | 'txt' | 'pdf' | 'docx' | 'doc' | 'rtf' | 'odt' | 'image';
 
 export type ImportSourceType = 'file-pdf' | 'file-docx' | 'file-doc' | 'file-rtf' | 'file-odt' | 'file-txt' | 'file-md' | 'file-html' | 'file-image';
+
+export type VisualSourceType = 'pdf' | 'docx';
+
+export interface VisualTextItem {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+  fontName: string;
+  fontWeight?: string;
+  fontStyle?: string;
+  transform: number[];
+}
+
+export interface VisualPage {
+  pageNumber: number;
+  width: number;
+  height: number;
+  textItems: VisualTextItem[];
+  htmlContent?: string;
+}
+
+export interface VisualEdit {
+  id: string;
+  pageNumber: number;
+  itemId: string;
+  originalText: string;
+  newText: string;
+  timestamp: string;
+}
+
+export interface VisualDocumentData {
+  originalBase64: string;
+  sourceType: VisualSourceType;
+  pageCount: number;
+  pages: VisualPage[];
+  edits: VisualEdit[];
+  thumbnail?: string;
+}
 
 export interface Document {
   id: string;
   userId?: string;
   title: string;
   description?: string;
-  content?: Record<string, unknown>; // TipTap JSON content
+  content?: Record<string, unknown>; // TipTap JSON content (rich/text/html)
   format: DocumentFormat;
   mimeType?: string;
   extension?: DocumentExtension;
@@ -19,6 +61,7 @@ export interface Document {
   templateId?: string;
   tags?: string; // JSON string array
   metadata?: Record<string, unknown>;
+  visualData?: VisualDocumentData; // For 'visual' format documents
   createdAt: string;
   updatedAt: string;
   lastOpenedAt?: string;

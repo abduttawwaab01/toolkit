@@ -1,4 +1,4 @@
-import type { DocumentFormat } from "@/types/document";
+import type { DocumentFormat, VisualDocumentData } from "@/types/document";
 
 const SUPPORTED_IMPORTS: Record<string, { format: DocumentFormat; label: string }> = {
   "application/pdf": { format: "rich", label: "PDF" },
@@ -42,6 +42,7 @@ export interface ImportResult {
   sourceType: string;
   pageCount?: number;
   originalFormat?: string;
+  visualData?: VisualDocumentData;
 }
 
 function isImageFile(mimeType: string): boolean {
@@ -428,4 +429,81 @@ export async function importFile(file: File): Promise<ImportResult> {
   if (mime === "text/plain" || ext === "txt") return parseTxt(file);
 
   return parseTxt(file);
+}
+
+export function isVisualFileType(file: File): boolean {
+  const ext = file.name.split(".").pop()?.toLowerCase() || "";
+  return ext === "pdf" || ext === "docx";
+}
+
+export async function importVisualPdf(file: File): Promise<ImportResult> {
+  const { getPdfMetadata, extractAllPages, renderPageThumbnail } = await import("@/lib/pdf-service");
+
+  const base64 = await readFileAsBase64(file);
+  const arrayBuffer = await file.arrayBuffer();
+  const { pageCount, title } = await getPdfMetadata(arrayBuffer);
+  const pages = await extractAllPages(arrayBuffer);
+
+  let thumbnail: string | undefined;
+  try {
+    thumbnail = await renderPageThumbnail(arrayBuffer, 1, 160);
+  } catch {
+    // skip thumbnail on failure
+  }
+
+  const visualData: VisualDocumentData = {
+    originalBase64: base64,
+    sourceType: "pdf",
+    pageCount,
+    pages,
+    edits: [],
+    thumbnail,
+  };
+
+  return {
+    content: { type: "doc", content: [] },
+    format: "visual",
+    title: title || file.name.replace(/\.[^.]+$/, ""),
+    mimeType: "application/pdf",
+    sourceType: "file-pdf",
+    pageCount,
+    originalFormat: "PDF",
+    visualData,
+  };
+}
+
+export async function importVisualDocx(file: File): Promise<ImportResult> {
+  const mammoth = await import("mammoth");
+
+  const base64 = await readFileAsBase64(file);
+  const arrayBuffer = await file.arrayBuffer();
+  const result = await mammoth.convertToHtml({ arrayBuffer });
+  const html = result.value;
+
+  const pages = [{
+    pageNumber: 1,
+    width: 595,
+    height: 842,
+    textItems: [],
+    htmlContent: html,
+  }];
+
+  const visualData: VisualDocumentData = {
+    originalBase64: base64,
+    sourceType: "docx",
+    pageCount: 1,
+    pages,
+    edits: [],
+  };
+
+  return {
+    content: { type: "doc", content: [] },
+    format: "visual",
+    title: file.name.replace(/\.[^.]+$/, ""),
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    sourceType: "file-docx",
+    pageCount: 1,
+    originalFormat: "DOCX",
+    visualData,
+  };
 }

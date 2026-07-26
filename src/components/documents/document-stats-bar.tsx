@@ -25,6 +25,7 @@ const FORMAT_BADGE: Record<DocumentFormat, { label: string; color: string; icon:
   markdown: { label: "Markdown", color: "text-neon-purple", icon: Code2 },
   text: { label: "Text", color: "text-text-secondary", icon: FileType },
   html: { label: "HTML", color: "text-neon-pink", icon: FileCode },
+  visual: { label: "Visual", color: "text-neon-cyan", icon: FileText },
 };
 
 function SaveIndicator({ isSaving, isDirty }: { isSaving: boolean; isDirty: boolean }) {

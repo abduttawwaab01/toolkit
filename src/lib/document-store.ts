@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Document, DocumentFormat, DocumentVersion } from '@/types/document';
+import type { Document, DocumentFormat, DocumentVersion, VisualDocumentData, VisualEdit } from '@/types/document';
 
 const DOCUMENTS_KEY = 'toolkit-documents';
 const VERSIONS_PREFIX = 'toolkit-versions-';
@@ -49,6 +49,7 @@ interface DocumentState {
 
   loadDocuments: () => void;
   createDocument: (data: { title: string; description?: string; format: DocumentFormat; tags?: string[] }) => Document;
+  createVisualDocument: (data: { title: string; description?: string; format: 'visual'; visualData: VisualDocumentData; tags?: string[] }) => Document;
   saveCurrentDocument: () => void;
   deleteDocument: (id: string) => void;
   addVersion: () => DocumentVersion;
@@ -68,6 +69,8 @@ interface DocumentState {
   setActivePanel: (panel: 'editor' | 'preview' | 'convert' | 'versions') => void;
   setZoom: (zoom: number) => void;
   setSearchQuery: (q: string) => void;
+  setVisualData: (data: VisualDocumentData) => void;
+  addVisualEdit: (edit: VisualEdit) => void;
   reset: () => void;
 }
 
@@ -131,6 +134,28 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     const docs = [...get().documents, doc];
     saveToStorage(docs);
     set({ documents: docs });
+    return doc;
+  },
+
+  createVisualDocument: (data) => {
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    const doc: Document = {
+      id,
+      title: data.title || 'Untitled',
+      description: data.description,
+      format: 'visual',
+      wordCount: 0,
+      size: 0,
+      isArchived: false,
+      tags: JSON.stringify(data.tags || []),
+      visualData: data.visualData,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const docs = [...get().documents, doc];
+    saveToStorage(docs);
+    set({ documents: docs, currentDocument: doc });
     return doc;
   },
 
@@ -217,5 +242,31 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   setActivePanel: (panel) => set({ activePanel: panel }),
   setZoom: (zoom) => set({ zoom }),
   setSearchQuery: (q) => set({ searchQuery: q }),
+  setVisualData: (data) => {
+    const { currentDocument } = get();
+    if (!currentDocument) return;
+    const updated = { ...currentDocument, visualData: data };
+    const docs = get().documents.map((d) => (d.id === updated.id ? updated : d));
+    saveToStorage(docs);
+    set({ currentDocument: updated, documents: docs, isDirty: true });
+  },
+  addVisualEdit: (edit) => {
+    const { currentDocument } = get();
+    if (!currentDocument || !currentDocument.visualData) return;
+    const existing = currentDocument.visualData.edits.findIndex(
+      (e) => e.itemId === edit.itemId && e.pageNumber === edit.pageNumber,
+    );
+    const newEdits = [...currentDocument.visualData.edits];
+    if (existing >= 0) {
+      newEdits[existing] = edit;
+    } else {
+      newEdits.push(edit);
+    }
+    const updatedVisualData = { ...currentDocument.visualData, edits: newEdits };
+    const updated = { ...currentDocument, visualData: updatedVisualData };
+    const docs = get().documents.map((d) => (d.id === updated.id ? updated : d));
+    saveToStorage(docs);
+    set({ currentDocument: updated, documents: docs, isDirty: true });
+  },
   reset: () => set(initialState),
 }));

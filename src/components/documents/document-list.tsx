@@ -33,6 +33,7 @@ const FORMAT_CONFIG: Record<DocumentFormat, { label: string; color: string; bg: 
   markdown: { label: "Markdown", color: "text-neon-purple", bg: "bg-neon-purple/10 border-neon-purple/30", icon: Code2 },
   text: { label: "Plain Text", color: "text-text-secondary", bg: "bg-glass-medium border-border-default", icon: FileType },
   html: { label: "HTML", color: "text-neon-pink", bg: "bg-neon-pink/10 border-neon-pink/30", icon: FileCode },
+  visual: { label: "Visual Edit", color: "text-neon-cyan", bg: "bg-neon-cyan/10 border-neon-cyan/30", icon: FileText },
 };
 
 function FormatBadge({ format }: { format: DocumentFormat }) {

@@ -112,6 +112,77 @@ export function DocumentExport() {
 
       const state = useDocumentStore.getState();
       const docFormat = state.currentDocument?.format;
+      const visualData = state.currentDocument?.visualData;
+
+      // Handle visual document exports
+      if (docFormat === "visual" && visualData) {
+        if (selectedFormat === "pdf" && visualData.sourceType === "pdf") {
+          const { exportVisualAsPdf } = await import("@/lib/pdf-service");
+          const blob = await exportVisualAsPdf(visualData.originalBase64, visualData.edits);
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${fileName}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 10000);
+          setExported(true);
+          setTimeout(() => setExported(false), 3000);
+          return;
+        }
+
+        if (selectedFormat === "pdf" && visualData.sourceType === "docx") {
+          const blob = await exportDocument({ content: visualData.pages[0]?.htmlContent || "", title: fileName, format: "pdf", docFormat: "html" });
+          if (!blob) throw new Error("Failed to generate export");
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${fileName}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 10000);
+          setExported(true);
+          setTimeout(() => setExported(false), 3000);
+          return;
+        }
+
+        if (selectedFormat === "html") {
+          const htmlContent = visualData.pages.map((p) => p.htmlContent || "").join("\n<hr>\n");
+          const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${fileName}</title><style>body{font-family:sans-serif;max-width:800px;margin:0 auto;padding:20px}</style></head><body>${htmlContent}</body></html>`], { type: "text/html" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${fileName}.html`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 10000);
+          setExported(true);
+          setTimeout(() => setExported(false), 3000);
+          return;
+        }
+
+        if (selectedFormat === "txt") {
+          const text = visualData.pages.map((p) => p.textItems.map((t) => t.text).join(" ")).join("\n\n");
+          const blob = new Blob([text], { type: "text/plain" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${fileName}.txt`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 10000);
+          setExported(true);
+          setTimeout(() => setExported(false), 3000);
+          return;
+        }
+
+        throw new Error(`Export to ${format.name} is not supported for visual documents. Try PDF, HTML, or text.`);
+      }
+
       let content = rawContent;
 
       if (docFormat === "rich" || docFormat === "html") {

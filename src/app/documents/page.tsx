@@ -21,13 +21,14 @@ import { FileUploadZone } from "@/components/documents/file-upload-zone";
 import { DocumentTemplates, type Template } from "@/components/documents/document-templates";
 import { KeyboardShortcuts } from "@/components/documents/keyboard-shortcuts";
 import { importFile, type ImportResult } from "@/lib/document-import-service";
-import type { Document, DocumentFormat } from "@/types/document";
+import type { Document, DocumentFormat, VisualEdit } from "@/types/document";
 
 const FORMAT_CONFIG: Record<DocumentFormat, { label: string; color: string; bg: string; icon: React.ElementType }> = {
   rich: { label: "Rich Text", color: "text-neon-cyan", bg: "bg-neon-cyan/10 border-neon-cyan/30", icon: FileText },
   markdown: { label: "Markdown", color: "text-neon-purple", bg: "bg-neon-purple/10 border-neon-purple/30", icon: Code2 },
   text: { label: "Plain Text", color: "text-text-secondary", bg: "bg-glass-medium border-border-default", icon: FileType },
   html: { label: "HTML", color: "text-neon-pink", bg: "bg-neon-pink/10 border-neon-pink/30", icon: FileCode },
+  visual: { label: "Visual Edit", color: "text-neon-cyan", bg: "bg-neon-cyan/10 border-neon-cyan/30", icon: FileText },
 };
 
 export default function DocumentsPage() {
@@ -108,6 +109,31 @@ export default function DocumentsPage() {
   }, [setCurrentDocument, setEditorContent, setRawContent, setWordCount, setCharCount, setIsDirty, setVersions]);
 
   const handleImportResult = useCallback((result: ImportResult) => {
+    // Handle visual document imports
+    if (result.format === "visual" && result.visualData) {
+      const doc = createDocument({ title: result.title, format: "visual" });
+      const updatedDoc: Document = {
+        ...doc,
+        title: result.title,
+        format: "visual",
+        content: { type: "doc", content: [] },
+        visualData: result.visualData,
+        wordCount: 0,
+        mimeType: result.mimeType,
+        description: result.originalFormat ? `Imported ${result.originalFormat} (visual edit)` : undefined,
+      };
+      const docs = useDocumentStore.getState().documents.map((d) => d.id === doc.id ? updatedDoc : d);
+      localStorage.setItem("toolkit-documents", JSON.stringify(docs));
+      useDocumentStore.setState({ documents: docs, currentDocument: updatedDoc });
+      setEditorContent({ type: "doc", content: [] });
+      setRawContent("");
+      setWordCount(0);
+      setCharCount(0);
+      setIsDirty(false);
+      setView("editor");
+      return;
+    }
+
     const content = typeof result.content === "string" && (result.format === "rich")
       ? (() => { try { return JSON.parse(result.content) as Record<string, unknown>; } catch { return result.content; } })()
       : result.content;
@@ -493,12 +519,22 @@ export default function DocumentsPage() {
               <div className="flex-1 flex flex-col min-w-0">
                 {currentDocument ? (
                   <>
-                    <div className="flex-1 min-h-0" style={{ zoom: `${zoom}%` }}>
+                    <div className="flex-1 min-h-0" style={currentDocument.format === "visual" ? {} : { zoom: `${zoom}%` }}>
                       <Editor
                         documentId={currentDocument.id}
                         format={currentDocument.format}
                         initialContent={currentDocument.content}
                         onUpdate={handleContentChange}
+                        visualData={currentDocument.visualData}
+                        onUpdateEdits={(edits: VisualEdit[]) => {
+                          if (currentDocument.visualData) {
+                            useDocumentStore.getState().setVisualData({
+                              ...currentDocument.visualData,
+                              edits,
+                            });
+                            setIsDirty(true);
+                          }
+                        }}
                       />
                     </div>
                     <DocumentStatsBar />

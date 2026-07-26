@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { DocumentFormat } from "@/types/document";
+import type { DocumentFormat, VisualDocumentData, VisualEdit } from "@/types/document";
 
 const RichEditor = dynamic(
   () => import("./rich-editor").then((m) => ({ default: m.RichEditor })),
@@ -18,12 +18,20 @@ const TextEditor = dynamic(
   { ssr: false },
 );
 
+const VisualEditor = dynamic(
+  () => import("../visual-editor").then((m) => ({ default: m.VisualEditor })),
+  { ssr: false },
+);
+
 interface EditorProps {
   documentId: string;
   format: DocumentFormat;
   initialContent?: Record<string, unknown> | string;
   onUpdate?: (content: Record<string, unknown> | string) => void;
   editable?: boolean;
+  visualData?: VisualDocumentData;
+  onUpdateEdits?: (edits: VisualEdit[]) => void;
+  onExportVisual?: (blob: Blob, filename: string) => void;
 }
 
 export function Editor({
@@ -32,8 +40,23 @@ export function Editor({
   initialContent,
   onUpdate,
   editable = true,
+  visualData,
+  onUpdateEdits,
+  onExportVisual,
 }: EditorProps) {
   switch (format) {
+    case "visual":
+      if (!visualData) return <div className="p-4 text-text-tertiary">No visual data available</div>;
+      return (
+        <VisualEditor
+          documentId={documentId}
+          title={visualData.pages[0] ? "Document" : "Document"}
+          visualData={visualData}
+          onUpdateEdits={onUpdateEdits || (() => {})}
+          onExport={onExportVisual}
+        />
+      );
+
     case "rich":
       return (
         <RichEditor
