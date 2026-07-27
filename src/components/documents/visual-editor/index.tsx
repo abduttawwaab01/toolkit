@@ -43,7 +43,7 @@ export function VisualEditor({ documentId, title, visualData, onUpdateEdits, onE
         for (let i = 0; i < binary.length; i++) {
           bytes[i] = binary.charCodeAt(i);
         }
-        pdfBytesRef.current = bytes.buffer;
+        pdfBytesRef.current = bytes.buffer.slice(0);
       } catch {
         console.error("Failed to decode PDF bytes");
       }

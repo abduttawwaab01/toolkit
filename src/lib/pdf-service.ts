@@ -15,7 +15,7 @@ function buildTextItemId(pageNumber: number, index: number, text: string): strin
 
 export async function getPdfMetadata(pdfBytes: ArrayBuffer): Promise<{ pageCount: number; title?: string }> {
   const pdfjs = await getPdfjs();
-  const pdf = await pdfjs.getDocument({ data: pdfBytes }).promise;
+  const pdf = await pdfjs.getDocument({ data: pdfBytes.slice(0) }).promise;
   const metadata = await pdf.getMetadata().catch(() => null);
   return {
     pageCount: pdf.numPages,
@@ -25,7 +25,7 @@ export async function getPdfMetadata(pdfBytes: ArrayBuffer): Promise<{ pageCount
 
 export async function extractTextItems(pdfBytes: ArrayBuffer, pageNumber: number): Promise<{ items: VisualTextItem[]; width: number; height: number }> {
   const pdfjs = await getPdfjs();
-  const pdf = await pdfjs.getDocument({ data: pdfBytes }).promise;
+  const pdf = await pdfjs.getDocument({ data: pdfBytes.slice(0) }).promise;
   const page = await pdf.getPage(pageNumber);
   const viewport = page.getViewport({ scale: 1 });
   const content = await page.getTextContent();
@@ -60,7 +60,7 @@ export async function renderPageToCanvas(
   canvas?: HTMLCanvasElement,
 ): Promise<HTMLCanvasElement> {
   const pdfjs = await getPdfjs();
-  const pdf = await pdfjs.getDocument({ data: pdfBytes }).promise;
+  const pdf = await pdfjs.getDocument({ data: pdfBytes.slice(0) }).promise;
   const page = await pdf.getPage(pageNumber);
   const viewport = page.getViewport({ scale });
 
@@ -93,7 +93,7 @@ export async function renderPageThumbnail(pdfBytes: ArrayBuffer, pageNumber: num
 
 export async function extractAllPages(pdfBytes: ArrayBuffer): Promise<VisualPage[]> {
   const pdfjs = await getPdfjs();
-  const pdf = await pdfjs.getDocument({ data: pdfBytes }).promise;
+  const pdf = await pdfjs.getDocument({ data: pdfBytes.slice(0) }).promise;
   const pages: VisualPage[] = [];
 
   for (let i = 1; i <= pdf.numPages; i++) {

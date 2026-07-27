@@ -5,7 +5,11 @@ import { scheduleAutoDelete } from "@/lib/auto-delete";
 import { jsonResponse } from "@/lib/json";
 
 export const maxDuration = 60;
+export const dynamic = "force-dynamic";
 
+// Vercel Hobby tier body limit is ~4.5MB. Files above this threshold
+// must use the presigned URL endpoint (POST /api/media/presign) for direct-to-R2 upload.
+const MAX_DIRECT_SIZE = 4 * 1024 * 1024; // 4MB — safe for Vercel Hobby
 const MAX_FILE_SIZE = 524288000;
 
 export async function POST(req: NextRequest) {
@@ -20,6 +24,14 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const contentLength = parseInt(req.headers.get("content-length") || "0", 10);
+    if (contentLength > MAX_DIRECT_SIZE) {
+      return jsonResponse({
+        error: "File too large for direct upload. Use /api/media/presign for files larger than 4MB.",
+        presignEndpoint: "/api/media/presign",
+      }, { status: 413 });
+    }
+
     const formData = await req.formData();
     const file = formData.get("file") as File;
     const formUserId = formData.get("userId") as string | null;

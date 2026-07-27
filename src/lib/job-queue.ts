@@ -11,21 +11,30 @@ export async function enqueueJob(
   payload: JobPayload,
   opts?: { scheduledAt?: Date; priority?: number; maxRetries?: number },
 ): Promise<{ id: string }> {
-  const job = await db.jobQueue.create({
-    data: {
-      type,
-      payload: payload as Prisma.InputJsonValue,
-      priority: opts?.priority ?? 0,
-      scheduledAt: opts?.scheduledAt ?? new Date(),
-      maxRetries: opts?.maxRetries ?? 3,
-    },
-  });
-  return { id: job.id };
+  try {
+    const job = await db.jobQueue.create({
+      data: {
+        type,
+        payload: payload as Prisma.InputJsonValue,
+        priority: opts?.priority ?? 0,
+        scheduledAt: opts?.scheduledAt ?? new Date(),
+        maxRetries: opts?.maxRetries ?? 3,
+      },
+    });
+    return { id: job.id };
+  } catch {
+    return { id: "" };
+  }
 }
 
 export async function processPendingJobs(): Promise<number> {
   const lockKey = "last_job_queue_run";
-  const lockSetting = await db.platformSetting.findUnique({ where: { key: lockKey } });
+  let lockSetting: { value: string } | null = null;
+  try {
+    lockSetting = await db.platformSetting.findUnique({ where: { key: lockKey } });
+  } catch {
+    return 0; // table likely doesn't exist yet
+  }
   const lastRun = lockSetting ? parseInt(lockSetting.value, 10) || 0 : 0;
   if (Date.now() - lastRun < 60_000) return 0;
 
@@ -91,11 +100,15 @@ export async function processPendingJobs(): Promise<number> {
     }
   }
 
-  await db.platformSetting.upsert({
-    where: { key: lockKey },
-    update: { value: String(Date.now()) },
-    create: { key: lockKey, value: String(Date.now()), label: "Last Job Queue Run", category: "system", type: "number" },
-  });
+  try {
+    await db.platformSetting.upsert({
+      where: { key: lockKey },
+      update: { value: String(Date.now()) },
+      create: { key: lockKey, value: String(Date.now()), label: "Last Job Queue Run", category: "system", type: "number" },
+    });
+  } catch {
+    // platform table may not exist yet — best-effort
+  }
 
   return processed;
 }
