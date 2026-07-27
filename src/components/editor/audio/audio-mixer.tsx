@@ -8,6 +8,7 @@ import { AudioProcessing } from "./audio-processing";
 import { AudioEffectsRack } from "./audio-effects-rack";
 import { SoundEffectsPanel } from "./sound-effects-panel";
 import { BackgroundMusicPanel } from "./background-music-panel";
+import { StemSeparationPanel } from "./stem-separation-panel";
 
 export function AudioMixer() {
   const {
@@ -17,9 +18,11 @@ export function AudioMixer() {
     masterVolume,
     setMasterVolume,
     setTrackVolume,
+    setTrackEqBands,
+    setTrackPan,
     updateTrack,
   } = useEditorStore();
-  const [tab, setTab] = useState<"mixer" | "eq" | "effects" | "studio" | "sfx" | "bgm">("mixer");
+  const [tab, setTab] = useState<"mixer" | "eq" | "effects" | "studio" | "sfx" | "bgm" | "stems">("mixer");
   const [masterDragging, setMasterDragging] = useState(false);
 
   const audioTracks = tracks.filter((t) => t.type === "audio");
@@ -76,6 +79,14 @@ export function AudioMixer() {
           }`}
         >
           BGM
+        </button>
+        <button
+          onClick={() => setTab("stems")}
+          className={`px-2.5 py-1 rounded-lg text-[10px] font-medium transition-colors ${
+            tab === "stems" ? "bg-neon-cyan/15 text-neon-cyan" : "text-text-tertiary hover:text-text-primary hover:bg-glass-medium"
+          }`}
+        >
+          Stems
         </button>
       </div>
 
@@ -156,8 +167,9 @@ export function AudioMixer() {
         <div className="flex-1 overflow-y-auto px-3 pb-3">
           {selectedTrackId ? (
             <AudioEqualizer
+              initialBands={tracks.find((t) => t.id === selectedTrackId)?.eqBands}
               onChange={(bands) => {
-                // Store EQ bands for the selected track
+                setTrackEqBands(selectedTrackId, bands);
               }}
             />
           ) : (
@@ -196,6 +208,13 @@ export function AudioMixer() {
       {tab === "bgm" && (
         <div className="flex-1 overflow-y-auto px-3 pb-3">
           <BackgroundMusicPanel />
+        </div>
+      )}
+
+      {/* Stems tab */}
+      {tab === "stems" && (
+        <div className="flex-1 overflow-y-auto px-3 pb-3">
+          <StemSeparationPanel />
         </div>
       )}
     </div>

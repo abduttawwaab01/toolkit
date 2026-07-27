@@ -94,7 +94,11 @@ function buildConvolverReverb(ctx: AudioContext, params: Record<string, number>)
   damping.connect(wet);
   wet.connect(merger);
   dry.connect(merger);
-  return { input: dry, output: merger };
+  // Input splitter: send to both dry and wet paths
+  const inputSplit = ctx.createGain();
+  inputSplit.connect(dry);
+  inputSplit.connect(convolver);
+  return { input: inputSplit, output: merger };
 }
 
 function buildSimpleChorus(ctx: AudioContext, params: Record<string, number>): EffectNode {
@@ -130,10 +134,42 @@ function buildSimpleChorus(ctx: AudioContext, params: Record<string, number>): E
 }
 
 function buildNoiseGate(ctx: AudioContext, params: Record<string, number>): EffectNode {
+  const thresholdDb = params.threshold ?? -40;
+  const threshold = Math.pow(10, thresholdDb / 20);
+  const attackTime = (params.attack ?? 1) / 1000;
+  const releaseTime = (params.release ?? 50) / 1000;
+
   const input = ctx.createGain();
   const output = ctx.createGain();
-  output.gain.value = 1;
-  return { input, output };
+  const processor = ctx.createScriptProcessor(256, 1, 1);
+  let envelope = 0;
+
+  processor.onaudioprocess = (e) => {
+    const ch = e.inputBuffer.getChannelData(0);
+    const out = e.outputBuffer.getChannelData(0);
+    let peak = 0;
+    for (let i = 0; i < ch.length; i++) {
+      const abs = Math.abs(ch[i]);
+      if (abs > peak) peak = abs;
+    }
+    const dt = ch.length / ctx.sampleRate;
+    if (peak > threshold) {
+      envelope = Math.min(1, envelope + dt / Math.max(attackTime, 0.001));
+    } else {
+      envelope = Math.max(0, envelope - dt / Math.max(releaseTime, 0.001));
+    }
+    for (let i = 0; i < ch.length; i++) {
+      out[i] = ch[i] * envelope;
+    }
+  };
+
+  input.connect(processor);
+  processor.connect(output);
+  return {
+    input,
+    output,
+    cleanup: () => { try { processor.disconnect(); } catch {} processor.onaudioprocess = null; },
+  };
 }
 
 export function buildEffectChain(

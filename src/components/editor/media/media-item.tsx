@@ -11,6 +11,7 @@ interface MediaItemProps {
   onSelect?: (item: MediaItemType) => void;
   onAddToTimeline?: (item: MediaItemType) => void;
   onEditImage?: (url: string) => void;
+  onSeparate?: (item: MediaItemType) => void;
 }
 
 /**
@@ -19,7 +20,7 @@ interface MediaItemProps {
  * Drag-to-timeline: sets drag data with the item JSON.
  * Right-click context menu via buttons (mobile-friendly).
  */
-export function MediaItem({ item, onDelete, onSelect, onAddToTimeline, onEditImage }: MediaItemProps) {
+export function MediaItem({ item, onDelete, onSelect, onAddToTimeline, onEditImage, onSeparate }: MediaItemProps) {
   const [imgError, setImgError] = useState(false);
   const dragRef = useRef<HTMLDivElement>(null);
 
@@ -119,6 +120,14 @@ export function MediaItem({ item, onDelete, onSelect, onAddToTimeline, onEditIma
               className="glass rounded-lg px-2 py-1.5 text-[10px] text-neon-cyan hover:bg-glass-heavy transition-colors"
             >
               Edit
+            </button>
+          )}
+          {item.type === "audio" && onSeparate && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onSeparate(item); }}
+              className="glass rounded-lg px-2 py-1.5 text-[10px] text-neon-purple hover:bg-glass-heavy transition-colors"
+            >
+              Separate
             </button>
           )}
           <button

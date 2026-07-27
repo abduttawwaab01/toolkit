@@ -1,3 +1,5 @@
+import { isOllamaAvailable, ollamaChat } from "./local-adapter";
+
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 
 export interface OpenRouterMessage {
@@ -112,6 +114,19 @@ export class OpenRouterClient {
     maxTokens?: number;
     responseFormat?: { type: "text" | "json_object" };
   }): Promise<string> {
+    // Try Ollama first (local, free)
+    try {
+      const ollamaAvailable = await isOllamaAvailable();
+      if (ollamaAvailable) {
+        const ollamaResult = await ollamaChat({
+          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          temperature: options?.temperature,
+        });
+        if (ollamaResult) return ollamaResult;
+      }
+    } catch {}
+
+    // Fallback to OpenRouter
     const res = await this.request(messages, options);
     return res.choices[0]?.message?.content || "";
   }

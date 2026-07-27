@@ -7,7 +7,8 @@ import {
   Undo2, Redo2, Scissors, Play, Square,
   Music, Type, Image, Wand2, Download, Sparkles,
   Magnet, Plus, Trash2, GripVertical, Keyboard, Settings,
-  PanelLeft, PanelRight, ChevronDown, ChevronUp, ArrowLeft, Pencil,
+  PanelLeft, PanelRight, ChevronDown, ChevronUp, ArrowLeft, Pencil, Users, Share2,
+  Mic, Palette, LayoutTemplate, Radio,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEditorStore } from "@/lib/editor-store";
@@ -17,6 +18,7 @@ import { ToastProvider } from "@/components/ui/toast/toast";
 import { KeyboardShortcutsModal, useKeyboardShortcuts } from "@/components/ui/keyboard-shortcuts";
 import { useAutoSave, SaveIndicator } from "@/components/ui/auto-save";
 import { WelcomeTour } from "@/components/ui/tour/welcome-tour";
+import { ClientCron } from "@/components/ui/client-cron";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Skeleton, TimelineSkeleton, MediaGridSkeleton, EffectsPanelSkeleton, PlayerSkeleton, MixerSkeleton } from "@/components/ui/skeleton/index";
 
@@ -36,6 +38,16 @@ const EditorSettings = lazy(() => import("@/components/editor/settings/editor-se
 const ElementsPanel = lazy(() => import("@/components/editor/overlay/elements-panel").then(m => ({ default: m.ElementsPanel })));
 const VideoEnhancerPanel = lazy(() => import("@/components/editor/video/video-enhancer-panel").then(m => ({ default: m.VideoEnhancerPanel })));
 const ImageEditor = lazy(() => import("@/components/editor/image/image-editor").then(m => ({ default: m.ImageEditor })));
+const KeyframeAnimationPanel = lazy(() => import("@/components/editor/ai/keyframe-animation-panel").then(m => ({ default: m.KeyframeAnimationPanel })));
+const ShareDialog = lazy(() => import("@/components/editor/collaboration/share-dialog").then(m => ({ default: m.ShareDialog })));
+const CommentsPanel = lazy(() => import("@/components/editor/collaboration/comments-panel").then(m => ({ default: m.CommentsPanel })));
+const ActivityLog = lazy(() => import("@/components/editor/collaboration/activity-log").then(m => ({ default: m.ActivityLog })));
+const PresenceAvatars = lazy(() => import("@/components/editor/collaboration/presence-avatars").then(m => ({ default: m.PresenceAvatars })));
+const TemplateBrowser = lazy(() => import("@/components/editor/templates/template-browser").then(m => ({ default: m.TemplateBrowser })));
+const AutoColorPanel = lazy(() => import("@/components/editor/effects/auto-color-panel").then(m => ({ default: m.AutoColorPanel })));
+const VoiceLabPanel = lazy(() => import("@/components/editor/ai/voice-lab-panel").then(m => ({ default: m.VoiceLabPanel })));
+const ProceduralMusicPanel = lazy(() => import("@/components/editor/audio/procedural-music-panel").then(m => ({ default: m.ProceduralMusicPanel })));
+const CollaboratorPresence = lazy(() => import("@/components/editor/collaboration/collaborator-presence").then(m => ({ default: m.CollaboratorPresence })));
 
 function PanelFallback({ label }: { label: string }) {
   return (
@@ -59,6 +71,7 @@ export default function EditorPage() {
   const [showLeftPanel, setShowLeftPanel] = useState(true);
   const [showRightPanel, setShowRightPanel] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
   const [mobileSheet, setMobileSheet] = useState<{ open: boolean; panel: string }>({ open: false, panel: "" });
   const [showMobileTimeline, setShowMobileTimeline] = useState(false);
 
@@ -170,6 +183,51 @@ export default function EditorPage() {
             <Suspense fallback={<PanelFallback label="video tools" />}><VideoEnhancerPanel /></Suspense>
           </ErrorBoundary>
         );
+      case "templates":
+        return (
+          <ErrorBoundary key="templates">
+            <Suspense fallback={<PanelFallback label="templates" />}><TemplateBrowser /></Suspense>
+          </ErrorBoundary>
+        );
+      case "color":
+        return (
+          <ErrorBoundary key="color">
+            <Suspense fallback={<PanelFallback label="color tools" />}><AutoColorPanel /></Suspense>
+          </ErrorBoundary>
+        );
+      case "voice":
+        return (
+          <ErrorBoundary key="voice">
+            <Suspense fallback={<PanelFallback label="voice lab" />}><VoiceLabPanel /></Suspense>
+          </ErrorBoundary>
+        );
+      case "music":
+        return (
+          <ErrorBoundary key="music">
+            <Suspense fallback={<PanelFallback label="music generator" />}><ProceduralMusicPanel /></Suspense>
+          </ErrorBoundary>
+        );
+      case "collaborate":
+        return (
+          <ErrorBoundary key="collaborate">
+            <Suspense fallback={<PanelFallback label="collaboration" />}>
+              <div className="flex flex-col h-full">
+                <div className="flex-1 overflow-y-auto">
+                  <div className="px-3 pt-2 pb-1">
+                    <h3 className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">Comments</h3>
+                  </div>
+                  <CommentsPanel />
+                </div>
+                <div className="px-3 pb-2 border-t border-border-subtle pt-2">
+                  <h3 className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">Activity</h3>
+                  <div className="max-h-32 overflow-y-auto">
+                    <ActivityLog />
+                  </div>
+                </div>
+              </div>
+            </Suspense>
+          </ErrorBoundary>
+        );
       default:
         return <ClipsList clips={clips} selectedClipId={selectedClipId} tracks={tracks} />;
     }
@@ -226,6 +284,12 @@ export default function EditorPage() {
               ariaLabel="Settings"
             />
             <div className="w-px h-5 bg-border-subtle mx-1 hidden sm:block" />
+            <Suspense fallback={null}>
+              <PresenceAvatars />
+            </Suspense>
+            <Button variant="ghost" size="sm" className="gap-1.5 hidden sm:flex" onClick={() => setShowShareDialog(true)}>
+              <Share2 size={14} /> Share
+            </Button>
             <Button variant="neon" size="sm" className="gap-1.5 hidden sm:flex" onClick={() => setShowExportDialog(true)}>
               <Download size={14} /> Export
             </Button>
@@ -258,8 +322,13 @@ export default function EditorPage() {
                   <PanelTab icon={<Type size={14} />} label="Text" active={activePanel === "text"} onClick={() => setActivePanel("text")} />
                   <PanelTab icon={<Wand2 size={14} />} label="Effects" active={activePanel === "effects"} onClick={() => setActivePanel("effects")} />
                   <PanelTab icon={<Sparkles size={14} />} label="AI Tools" active={activePanel === "ai"} onClick={() => setActivePanel("ai")} />
+                  <PanelTab icon={<LayoutTemplate size={14} />} label="Templates" active={activePanel === "templates"} onClick={() => setActivePanel("templates")} />
                   <PanelTab icon={<Image size={14} />} label="Elements" active={activePanel === "elements"} onClick={() => setActivePanel("elements")} />
+                  <PanelTab icon={<Palette size={14} />} label="Color" active={activePanel === "color"} onClick={() => setActivePanel("color")} />
                   <PanelTab icon={<Wand2 size={14} />} label="Video" active={activePanel === "video"} onClick={() => setActivePanel("video")} />
+                  <PanelTab icon={<Mic size={14} />} label="Voice" active={activePanel === "voice"} onClick={() => setActivePanel("voice")} />
+                  <PanelTab icon={<Radio size={14} />} label="Music" active={activePanel === "music"} onClick={() => setActivePanel("music")} />
+                  <PanelTab icon={<Users size={14} />} label="Collaborate" active={activePanel === "collaborate"} onClick={() => setActivePanel("collaborate")} />
                 </div>
                 <div className="flex-1 min-h-0">{leftPanelContent}</div>
               </motion.aside>
@@ -315,8 +384,13 @@ export default function EditorPage() {
               <MobileChip icon={<Type size={12} />} label="Text" active={activePanel === "text"} onClick={() => openMobilePanel("text")} />
               <MobileChip icon={<Wand2 size={12} />} label="Effects" active={activePanel === "effects"} onClick={() => openMobilePanel("effects")} />
               <MobileChip icon={<Sparkles size={12} />} label="AI" active={activePanel === "ai"} onClick={() => openMobilePanel("ai")} />
+              <MobileChip icon={<LayoutTemplate size={12} />} label="Templates" active={activePanel === "templates"} onClick={() => openMobilePanel("templates")} />
               <MobileChip icon={<Image size={12} />} label="Elements" active={activePanel === "elements"} onClick={() => openMobilePanel("elements")} />
+              <MobileChip icon={<Palette size={12} />} label="Color" active={activePanel === "color"} onClick={() => openMobilePanel("color")} />
               <MobileChip icon={<Wand2 size={12} />} label="Video" active={activePanel === "video"} onClick={() => openMobilePanel("video")} />
+              <MobileChip icon={<Mic size={12} />} label="Voice" active={activePanel === "voice"} onClick={() => openMobilePanel("voice")} />
+              <MobileChip icon={<Radio size={12} />} label="Music" active={activePanel === "music"} onClick={() => openMobilePanel("music")} />
+              <MobileChip icon={<Users size={12} />} label="Team" active={activePanel === "collaborate"} onClick={() => openMobilePanel("collaborate")} />
               <MobileChip icon={<Settings size={12} />} label="Settings" active={activePanel === "settings"} onClick={() => openMobilePanel("settings")} />
               <button
                 onClick={() => setShowMobileTimeline((p) => !p)}
@@ -358,19 +432,22 @@ export default function EditorPage() {
                 transition={{ duration: 0.2 }}
                 className="glass border-l border-border-subtle overflow-y-auto shrink-0 hidden lg:flex flex-col"
               >
-                <div className="p-3 border-b border-border-subtle">
-                  <h3 className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-3">Properties</h3>
-                  {selectedClipId ? (
-                    <ErrorBoundary>
-                      <Suspense fallback={<div className="animate-pulse h-20 rounded-lg glass" />}>
-                        <ClipProperties />
-                      </Suspense>
-                    </ErrorBoundary>
-                  ) : (
-                    <p className="text-[11px] text-text-tertiary">Select a clip to edit</p>
-                  )}
-                </div>
-                <div className="p-3 flex-1">
+                <div className="p-3 border-b border-border-subtle space-y-3">
+                  <Suspense fallback={null}><CollaboratorPresence projectId={project.id} currentUserId={userId || ""} /></Suspense>
+                  <div>
+                    <h3 className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-3">Properties</h3>
+                    {selectedClipId ? (
+                      <ErrorBoundary>
+                        <Suspense fallback={<div className="animate-pulse h-20 rounded-lg glass" />}>
+                          <ClipProperties />
+                        </Suspense>
+                      </ErrorBoundary>
+                    ) : (
+                      <p className="text-[11px] text-text-tertiary">Select a clip to edit</p>
+                    )}
+                  </div>
+                  </div>
+                  <div className="p-3 flex-1">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider">Tracks</h3>
                     <button onClick={() => addTrack("video")} className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-glass-medium transition-colors" title="Add track" aria-label="Add track">
@@ -413,8 +490,14 @@ export default function EditorPage() {
         {/* Modals / Sheets */}
         <Suspense fallback={null}><ExportDialog /></Suspense>
         <Suspense fallback={null}><ImageEditor /></Suspense>
+        {showShareDialog && (
+          <Suspense fallback={null}>
+            <ShareDialog onClose={() => setShowShareDialog(false)} />
+          </Suspense>
+        )}
         <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
         <WelcomeTour />
+        <ClientCron />
 
         {/* Mobile bottom sheet for panels */}
         <BottomSheet open={mobileSheet.open} onClose={() => setMobileSheet({ open: false, panel: "" })} title={mobileSheet.panel.charAt(0).toUpperCase() + mobileSheet.panel.slice(1)}>
@@ -649,6 +732,11 @@ function ClipProperties() {
         <input type="range" min={0} max={100} value={clip.opacity * 100}
           onChange={(e) => updateClip(clip.id, { opacity: Number(e.target.value) / 100 })}
           className="w-full mt-1 accent-neon-cyan h-1.5" />
+      </div>
+      <div className="pt-2 border-t border-border-subtle">
+        <Suspense fallback={<div className="animate-pulse h-32 rounded-lg glass" />}>
+          <KeyframeAnimationPanel />
+        </Suspense>
       </div>
     </div>
   );

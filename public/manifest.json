@@ -1,0 +1,17 @@
+{
+  "name": "ToolKit",
+  "short_name": "ToolKit",
+  "description": "Free browser-based video, image, and document editor with AI features",
+  "start_url": "/editor",
+  "display": "standalone",
+  "background_color": "#0a0a0f",
+  "theme_color": "#0a0a0f",
+  "orientation": "landscape",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "48x48", "type": "image/svg+xml" },
+    { "src": "/favicon.svg", "sizes": "192x192", "type": "image/svg+xml" },
+    { "src": "/favicon.svg", "sizes": "512x512", "type": "image/svg+xml" }
+  ],
+  "categories": ["productivity", "education", "multimedia"],
+  "lang": "en"
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { memo, useRef, useEffect } from "react";
 import { useEditorStore } from "@/lib/editor-store";
 import { cssTransformFromClip } from "@/lib/effects/index";
 
@@ -8,38 +8,39 @@ interface OverlayRendererProps {
   playhead: number;
 }
 
-export function OverlayRenderer({ playhead }: OverlayRendererProps) {
+export const OverlayRenderer = memo(function OverlayRenderer({ playhead }: OverlayRendererProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imagesRef = useRef<Map<string, HTMLImageElement>>(new Map());
   const rafRef = useRef<number>(0);
+  const playheadRef = useRef(playhead);
+  playheadRef.current = playhead;
 
-  // Subscribe to clips/tracks for overlay data
-  const overlayData = useEditorStore((s) => {
-    const w = s.project.width;
-    const h = s.project.height;
-    const overlays = s.clips.filter(
-      (c) => c.type === "overlay" && playhead >= c.startTime && playhead < c.startTime + c.duration,
-    );
-    return { overlays, width: w, height: h };
-  });
+  // Individual primitive selectors — stable references, no unnecessary re-renders
+  const clips = useEditorStore((s) => s.clips);
+  const width = useEditorStore((s) => s.project.width);
+  const height = useEditorStore((s) => s.project.height);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    canvas.width = overlayData.width;
-    canvas.height = overlayData.height;
+    canvas.width = width;
+    canvas.height = height;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const ph = playheadRef.current;
 
+      const activeClips = clips.filter(
+        (c) => c.type === "overlay" && ph >= c.startTime && ph < c.startTime + c.duration,
+      );
       const usedIds = new Set<string>();
 
-      for (const clip of overlayData.overlays) {
+      for (const clip of activeClips) {
         usedIds.add(clip.id);
-        const relTime = playhead - clip.startTime;
+        const relTime = ph - clip.startTime;
 
         let opacity = clip.opacity;
         if (clip.fadeIn && relTime < clip.fadeIn) opacity *= relTime / clip.fadeIn;
@@ -90,7 +91,7 @@ export function OverlayRenderer({ playhead }: OverlayRendererProps) {
 
     rafRef.current = requestAnimationFrame(render);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [overlayData, playhead]);
+  }, [width, height, clips]);
 
   return (
     <canvas
@@ -98,4 +99,4 @@ export function OverlayRenderer({ playhead }: OverlayRendererProps) {
       className="absolute inset-0 w-full h-full pointer-events-none z-20"
     />
   );
-}
+});

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { memo, useRef, useEffect } from "react";
 import { useEditorStore } from "@/lib/editor-store";
 import { buildEffectChain } from "@/lib/audio-engine/player-processor";
 
@@ -8,17 +8,20 @@ interface PlayerWaveformProps {
   isPlaying: boolean;
 }
 
-export function PlayerWaveform({ isPlaying }: PlayerWaveformProps) {
+export const PlayerWaveform = memo(function PlayerWaveform({ isPlaying }: PlayerWaveformProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
-  const gainRef = useRef<GainNode | null>(null);
+  const masterGainRef = useRef<GainNode | null>(null);
+  const trackGainRef = useRef<GainNode | null>(null);
+  const clipGainRef = useRef<GainNode | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const rafRef = useRef<number>(0);
   const chainRef = useRef<{ cleanup: () => void } | null>(null);
   const lastEffectsRef = useRef<string>("");
   const coreConnected = useRef(false);
 
+  // Use individual primitive selector — stable boolean, no unnecessary re-renders
   const effectRevision = useEditorStore((s) => {
     const clip = s.clips.find((c) => c.id === s.selectedClipId);
     const track = clip ? s.tracks.find((t) => t.id === clip.trackId) : null;
@@ -51,7 +54,9 @@ export function PlayerWaveform({ isPlaying }: PlayerWaveformProps) {
         const audioCtx = new AudioContext();
         audioCtxRef.current = audioCtx;
         sourceRef.current = audioCtx.createMediaElementSource(video);
-        gainRef.current = audioCtx.createGain();
+        trackGainRef.current = audioCtx.createGain();
+        clipGainRef.current = audioCtx.createGain();
+        masterGainRef.current = audioCtx.createGain();
         analyserRef.current = audioCtx.createAnalyser();
         analyserRef.current.fftSize = 256;
         coreConnected.current = false;
@@ -74,19 +79,25 @@ export function PlayerWaveform({ isPlaying }: PlayerWaveformProps) {
       chainRef.current = null;
 
       const source = sourceRef.current;
-      const gain = gainRef.current;
+      const trackGain = trackGainRef.current;
+      const clipGain = clipGainRef.current;
+      const masterGain = masterGainRef.current;
       const analyser = analyserRef.current;
-      if (!source || !gain || !analyser || !audioCtxRef.current) return;
+      if (!source || !trackGain || !clipGain || !masterGain || !analyser || !audioCtxRef.current) return;
 
       // Disconnect core nodes before reconnecting to avoid duplicates
       if (coreConnected.current) {
-        try { gain.disconnect(); } catch {}
+        try { trackGain.disconnect(); } catch {}
+        try { clipGain.disconnect(); } catch {}
+        try { masterGain.disconnect(); } catch {}
         try { analyser.disconnect(); } catch {}
       }
 
       const chain = buildEffectChain(audioCtxRef.current, source, effects);
-      chain.output.connect(gain);
-      gain.connect(analyser);
+      chain.output.connect(trackGain);
+      trackGain.connect(clipGain);
+      clipGain.connect(masterGain);
+      masterGain.connect(analyser);
       analyser.connect(audioCtxRef.current.destination);
       chainRef.current = chain;
       coreConnected.current = true;
@@ -100,8 +111,17 @@ export function PlayerWaveform({ isPlaying }: PlayerWaveformProps) {
       ctx.clearRect(0, 0, w, h);
 
       const state = useEditorStore.getState();
-      if (gainRef.current) {
-        gainRef.current.gain.value = state.masterVolume;
+      if (masterGainRef.current) {
+        masterGainRef.current.gain.value = state.masterVolume;
+      }
+      // Apply track volume, clip volume, mute/solo
+      if (trackGainRef.current && clipGainRef.current) {
+        const clip = state.clips.find((c) => c.id === state.selectedClipId);
+        const track = clip ? state.tracks.find((t) => t.id === clip.trackId) : null;
+        const hasSolo = state.tracks.some((t) => t.solo);
+        const isMuted = track ? track.muted || (hasSolo && !track.solo) : false;
+        trackGainRef.current.gain.value = isMuted ? 0 : (track?.volume ?? 1);
+        clipGainRef.current.gain.value = clip?.volume ?? 1;
       }
 
       if (analyserRef.current) {
@@ -184,4 +204,4 @@ export function PlayerWaveform({ isPlaying }: PlayerWaveformProps) {
       className="absolute bottom-14 left-3 right-3 h-12 pointer-events-none z-10 opacity-50"
     />
   );
-}
+});

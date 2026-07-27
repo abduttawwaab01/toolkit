@@ -9,6 +9,11 @@ export interface EditorProject {
 
 export type TrackType = "video" | "audio" | "text" | "overlay";
 
+export interface EqBand {
+  freq: number;
+  gain: number;
+}
+
 export interface Track {
   id: string;
   name: string;
@@ -19,6 +24,8 @@ export interface Track {
   solo: boolean;
   volume: number;
   audioEffects: AudioEffect[];
+  eqBands: EqBand[];
+  pan: number; // -1 (left) to 1 (right)
   height: number;
   color: string;
 }
@@ -107,7 +114,7 @@ export interface EffectParamDefinition {
 export interface EffectDefinition {
   id: string;
   name: string;
-  category: "color" | "blur" | "filter" | "transform";
+  category: "color" | "blur" | "filter" | "transform" | "stylistic" | "distort" | "light" | "film";
   description: string;
   params: EffectParamDefinition[];
   icon: string;
@@ -139,7 +146,44 @@ export interface Clip {
   rotation: number;
   positionX: number;
   positionY: number;
+  animationKeyframes?: AnimationKeyframe[];
 }
+
+export type AnimationProperty = "opacity" | "scale" | "rotation" | "positionX" | "positionY";
+
+export interface AnimationKeyframe {
+  id: string;
+  time: number; // relative to clip start, in seconds
+  property: AnimationProperty;
+  value: number;
+  easing: EasingType;
+}
+
+export type EasingType = "linear" | "ease-in" | "ease-out" | "ease-in-out" | "spring" | "bounce" | "elastic";
+
+export interface EasingDefinition {
+  id: EasingType;
+  label: string;
+  css: string;
+}
+
+export const EASING_DEFINITIONS: EasingDefinition[] = [
+  { id: "linear", label: "Linear", css: "linear" },
+  { id: "ease-in", label: "Ease In", css: "cubic-bezier(0.4, 0, 1, 1)" },
+  { id: "ease-out", label: "Ease Out", css: "cubic-bezier(0, 0, 0.2, 1)" },
+  { id: "ease-in-out", label: "Ease In-Out", css: "cubic-bezier(0.4, 0, 0.2, 1)" },
+  { id: "spring", label: "Spring", css: "cubic-bezier(0.34, 1.56, 0.64, 1)" },
+  { id: "bounce", label: "Bounce", css: "cubic-bezier(0.68, -0.55, 0.265, 1.55)" },
+  { id: "elastic", label: "Elastic", css: "cubic-bezier(0.68, -0.55, 0.265, 1.55)" },
+];
+
+export const ANIMATION_PROPERTIES: { id: AnimationProperty; label: string; icon: string; min: number; max: number; default: number; step: number }[] = [
+  { id: "opacity", label: "Opacity", icon: "👁", min: 0, max: 1, default: 1, step: 0.01 },
+  { id: "scale", label: "Scale", icon: "🔍", min: 0, max: 5, default: 1, step: 0.05 },
+  { id: "rotation", label: "Rotation", icon: "🔄", min: -360, max: 360, default: 0, step: 1 },
+  { id: "positionX", label: "Position X", icon: "↔", min: -2000, max: 2000, default: 0, step: 1 },
+  { id: "positionY", label: "Position Y", icon: "↕", min: -2000, max: 2000, default: 0, step: 1 },
+];
 
 export interface VolumeKeyframe {
   time: number;  // relative to clip start
@@ -180,7 +224,7 @@ export interface TimeRulerMarker {
   type: "major" | "minor";
 }
 
-export type EditorPanel = "media" | "effects" | "text" | "properties" | "audio" | "ai" | "settings" | "elements" | "video";
+export type EditorPanel = "media" | "effects" | "text" | "properties" | "audio" | "ai" | "settings" | "elements" | "video" | "collaborate" | "templates" | "color" | "voice" | "music";
 
 export interface EditorSnapshot {
   tracks: Track[];

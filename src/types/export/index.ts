@@ -78,10 +78,10 @@ export interface ExportHistoryEntry {
   createdAt: number;
 }
 
-export const RESOLUTIONS: Record<ExportResolution, { width: number; height: number; label: string }> = {
-  "4320p": { width: 7680, height: 4320, label: "8K (4320p)" },
-  "2160p": { width: 3840, height: 2160, label: "4K (2160p)" },
-  "1440p": { width: 2560, height: 1440, label: "2K (1440p)" },
+export const RESOLUTIONS: Record<ExportResolution, { width: number; height: number; label: string; creditCost?: number }> = {
+  "4320p": { width: 7680, height: 4320, label: "8K (4320p)", creditCost: 3 },
+  "2160p": { width: 3840, height: 2160, label: "4K (2160p)", creditCost: 2 },
+  "1440p": { width: 2560, height: 1440, label: "2K (1440p)", creditCost: 1 },
   "1080p": { width: 1920, height: 1080, label: "Full HD (1080p)" },
   "720p": { width: 1280, height: 720, label: "HD (720p)" },
   "540p": { width: 960, height: 540, label: "SD (540p)" },

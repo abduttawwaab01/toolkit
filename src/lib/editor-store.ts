@@ -1,18 +1,42 @@
 import { create } from "zustand";
-import type { EditorProject, Track, Clip, EditorPanel, DragState, Transition, TransitionType, AudioEffectType } from "@/types/editor";
+import type { EditorProject, Track, Clip, EditorPanel, DragState, Transition, TransitionType, AudioEffectType, EqBand, AnimationKeyframe, AnimationProperty, EasingType } from "@/types/editor";
 import type { ExportHistoryEntry, ExportJob } from "@/types/export";
 import { clampZoom } from "./timeline-utils";
 import { createEffect } from "./effects/index";
 import { createAudioEffect } from "./effects/audio-effects";
 
-const MAX_HISTORY = 50;
+const MAX_HISTORY = 30;
 const uuid = () => crypto.randomUUID();
 
-interface HistoryEntry {
-  tracks: Track[];
-  clips: Clip[];
-  transitions: Transition[];
-  masterVolume: number;
+type HistoryCommand =
+  | { type: "snapshot"; before: Uint8Array; after: Uint8Array; desc: string }
+  | { type: "batch"; commands: HistoryCommand[]; desc: string };
+
+function cloneTracks(tracks: Track[]): Track[] {
+  return tracks.map((t) => ({ ...t, audioEffects: t.audioEffects.map((e) => ({ ...e, params: { ...e.params } })), eqBands: t.eqBands.map((b) => ({ ...b })) }));
+}
+
+function cloneClips(clips: Clip[]): Clip[] {
+  return clips.map((c) => ({
+    ...c,
+    effects: c.effects.map((e) => ({ ...e, params: { ...e.params } })),
+    volumeKeyframes: c.volumeKeyframes ? c.volumeKeyframes.map((k) => ({ ...k })) : [],
+    animationKeyframes: c.animationKeyframes ? c.animationKeyframes.map((k) => ({ ...k })) : [],
+    subtitles: c.subtitles ? c.subtitles.map((s) => ({ ...s })) : undefined,
+    textStyle: c.textStyle ? { ...c.textStyle } : undefined,
+    textAnimation: c.textAnimation ? { ...c.textAnimation } : undefined,
+  }));
+}
+
+function encodeState(tracks: Track[], clips: Clip[], transitions: Transition[], masterVolume: number): Uint8Array {
+  const obj = { t: tracks, c: clips, tr: transitions, m: masterVolume };
+  const json = JSON.stringify(obj);
+  return new TextEncoder().encode(json);
+}
+
+function decodeState(data: Uint8Array): { tracks: Track[]; clips: Clip[]; transitions: Transition[]; masterVolume: number } {
+  const json = new TextDecoder().decode(data);
+  return JSON.parse(json);
 }
 
 interface EditorState {
@@ -34,8 +58,8 @@ interface EditorState {
   dragState: DragState;
 
   // History
-  past: HistoryEntry[];
-  future: HistoryEntry[];
+  past: Uint8Array[];
+  future: Uint8Array[];
 
   pushHistory: () => void;
   undo: () => void;
@@ -74,6 +98,8 @@ interface EditorState {
   setMasterVolume: (volume: number) => void;
   setTrackVolume: (trackId: string, volume: number) => void;
   setTrackSolo: (trackId: string, solo: boolean) => void;
+  setTrackEqBands: (trackId: string, bands: EqBand[]) => void;
+  setTrackPan: (trackId: string, pan: number) => void;
   addAudioEffectToTrack: (trackId: string, effectType: AudioEffectType) => void;
   removeAudioEffectFromTrack: (trackId: string, effectId: string) => void;
   updateAudioEffectParam: (trackId: string, effectId: string, key: string, value: number) => void;
@@ -81,6 +107,11 @@ interface EditorState {
   addVolumeKeyframe: (clipId: string, time: number, value: number) => void;
   removeVolumeKeyframe: (clipId: string, keyframeIndex: number) => void;
   updateVolumeKeyframe: (clipId: string, keyframeIndex: number, updates: { time?: number; value?: number }) => void;
+
+  // Animation Keyframes
+  addAnimationKeyframe: (clipId: string, time: number, property: AnimationProperty, value: number, easing?: EasingType) => void;
+  removeAnimationKeyframe: (clipId: string, keyframeId: string) => void;
+  updateAnimationKeyframe: (clipId: string, keyframeId: string, updates: Partial<Pick<AnimationKeyframe, "time" | "value" | "easing">>) => void;
 
   // Playback
   setPlayhead: (time: number) => void;
@@ -129,9 +160,9 @@ const defaultProject: EditorProject = {
 };
 
 const defaultTracks: Track[] = [
-  { id: uuid(), name: "Video 1", type: "video", index: 0, locked: false, muted: false, solo: false, volume: 1, audioEffects: [], height: 60, color: "#4facfe" },
-  { id: uuid(), name: "Audio 1", type: "audio", index: 1, locked: false, muted: false, solo: false, volume: 1, audioEffects: [], height: 50, color: "#00f5d4" },
-  { id: uuid(), name: "Text", type: "text", index: 2, locked: false, muted: false, solo: false, volume: 1, audioEffects: [], height: 40, color: "#bf6aff" },
+  { id: uuid(), name: "Video 1", type: "video", index: 0, locked: false, muted: false, solo: false, volume: 1, audioEffects: [], eqBands: [], pan: 0, height: 60, color: "#4facfe" },
+  { id: uuid(), name: "Audio 1", type: "audio", index: 1, locked: false, muted: false, solo: false, volume: 1, audioEffects: [], eqBands: Array.from({ length: 10 }, (_, i) => ({ freq: [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000][i], gain: 0 })), pan: 0, height: 50, color: "#00f5d4" },
+  { id: uuid(), name: "Text", type: "text", index: 2, locked: false, muted: false, solo: false, volume: 1, audioEffects: [], eqBands: [], pan: 0, height: 40, color: "#bf6aff" },
 ];
 
 export const useEditorStore = create<EditorState>()((set, get) => ({
@@ -157,22 +188,26 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   future: [],
 
   pushHistory: () =>
-    set((s) => ({
-      past: [...s.past.slice(-(MAX_HISTORY - 1)), { tracks: s.tracks, clips: s.clips, transitions: s.transitions, masterVolume: s.masterVolume }],
-      future: [],
-    })),
+    set((s) => {
+      const snapshot = encodeState(s.tracks, s.clips, s.transitions, s.masterVolume);
+      return {
+        past: [...s.past.slice(-(MAX_HISTORY - 1)), snapshot],
+        future: [],
+      };
+    }),
 
   undo: () => {
     const { past, tracks, clips, transitions, masterVolume } = get();
     if (past.length === 0) return;
-    const prev = past[past.length - 1];
+    const prevData = decodeState(past[past.length - 1]);
+    const currentSnapshot = encodeState(tracks, clips, transitions, masterVolume);
     set({
       past: past.slice(0, -1),
-      future: [...past.slice(-1), { tracks, clips, transitions, masterVolume }, ...get().future.slice(-(MAX_HISTORY - 1))],
-      tracks: prev.tracks,
-      clips: prev.clips,
-      transitions: prev.transitions,
-      masterVolume: prev.masterVolume,
+      future: [...past.slice(-1), currentSnapshot, ...get().future.slice(-(MAX_HISTORY - 1))],
+      tracks: prevData.tracks,
+      clips: prevData.clips,
+      transitions: prevData.transitions,
+      masterVolume: prevData.masterVolume,
       selectedClipId: null,
     });
   },
@@ -180,14 +215,15 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   redo: () => {
     const { future, tracks, clips, transitions, masterVolume } = get();
     if (future.length === 0) return;
-    const next = future[0];
+    const nextData = decodeState(future[0]);
+    const currentSnapshot = encodeState(tracks, clips, transitions, masterVolume);
     set({
       future: future.slice(1),
-      past: [...get().past, { tracks, clips, transitions, masterVolume }].slice(-MAX_HISTORY),
-      tracks: next.tracks,
-      clips: next.clips,
-      transitions: next.transitions,
-      masterVolume: next.masterVolume,
+      past: [...get().past, currentSnapshot].slice(-MAX_HISTORY),
+      tracks: nextData.tracks,
+      clips: nextData.clips,
+      transitions: nextData.transitions,
+      masterVolume: nextData.masterVolume,
       selectedClipId: null,
     });
   },
@@ -207,6 +243,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         solo: false,
         volume: 1,
         audioEffects: [],
+        eqBands: type === "audio" ? Array.from({ length: 10 }, (_, i) => ({ freq: [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000][i], gain: 0 })) : [],
+        pan: 0,
         height: type === "audio" ? 50 : type === "text" ? 40 : 60,
         color: colors[type] || "#fff",
       };
@@ -243,7 +281,10 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     set((s) => ({ clips: s.clips.filter((c) => c.id !== id), selectedClipId: s.selectedClipId === id ? null : s.selectedClipId }));
   },
 
-  moveClip: (id, newStartTime, newTrackId) => set((s) => ({ clips: s.clips.map((c) => (c.id === id ? { ...c, startTime: Math.max(0, newStartTime), trackId: newTrackId || c.trackId } : c)) })),
+  moveClip: (id, newStartTime, newTrackId) => {
+    get().pushHistory();
+    set((s) => ({ clips: s.clips.map((c) => (c.id === id ? { ...c, startTime: Math.max(0, newStartTime), trackId: newTrackId || c.trackId } : c)) }));
+  },
 
   splitClip: (clipId, splitTime) => {
     const clip = get().clips.find((c) => c.id === clipId);
@@ -385,9 +426,15 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   setMasterVolume: (volume) => set({ masterVolume: Math.max(0, Math.min(2, volume)) }),
 
-  setTrackVolume: (trackId, volume) => set((s) => ({
-    tracks: s.tracks.map((t) => (t.id === trackId ? { ...t, volume: Math.max(0, Math.min(2, volume)) } : t)),
-  })),
+  setTrackVolume: (trackId, volume) => {
+    const prev = get().tracks.find((t) => t.id === trackId)?.volume;
+    if (prev !== undefined && Math.abs(prev - volume) > 0.01) {
+      get().pushHistory();
+    }
+    set((s) => ({
+      tracks: s.tracks.map((t) => (t.id === trackId ? { ...t, volume: Math.max(0, Math.min(2, volume)) } : t)),
+    }));
+  },
 
   setTrackSolo: (trackId, solo) => {
     get().pushHistory();
@@ -395,6 +442,16 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       tracks: s.tracks.map((t) => (t.id === trackId ? { ...t, solo } : t)),
     }));
   },
+
+  setTrackEqBands: (trackId, bands) =>
+    set((s) => ({
+      tracks: s.tracks.map((t) => (t.id === trackId ? { ...t, eqBands: bands } : t)),
+    })),
+
+  setTrackPan: (trackId, pan) =>
+    set((s) => ({
+      tracks: s.tracks.map((t) => (t.id === trackId ? { ...t, pan: Math.max(-1, Math.min(1, pan)) } : t)),
+    })),
 
   addAudioEffectToTrack: (trackId, effectType) => {
     get().pushHistory();
@@ -480,6 +537,49 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
               volumeKeyframes: (c.volumeKeyframes || []).map((kf, i) =>
                 i === keyframeIndex ? { ...kf, ...updates } : kf,
               ),
+            }
+          : c,
+      ),
+    }));
+  },
+
+  addAnimationKeyframe: (clipId, time, property, value, easing = "linear") => {
+    const id = crypto.randomUUID();
+    set((s) => ({
+      clips: s.clips.map((c) =>
+        c.id === clipId
+          ? {
+              ...c,
+              animationKeyframes: [...(c.animationKeyframes || []), { id, time, property, value, easing }]
+                .sort((a, b) => a.time - b.time),
+            }
+          : c,
+      ),
+    }));
+  },
+
+  removeAnimationKeyframe: (clipId, keyframeId) => {
+    set((s) => ({
+      clips: s.clips.map((c) =>
+        c.id === clipId
+          ? {
+              ...c,
+              animationKeyframes: (c.animationKeyframes || []).filter((k) => k.id !== keyframeId),
+            }
+          : c,
+      ),
+    }));
+  },
+
+  updateAnimationKeyframe: (clipId, keyframeId, updates) => {
+    set((s) => ({
+      clips: s.clips.map((c) =>
+        c.id === clipId
+          ? {
+              ...c,
+              animationKeyframes: (c.animationKeyframes || []).map((k) =>
+                k.id === keyframeId ? { ...k, ...updates } : k,
+              ).sort((a, b) => a.time - b.time),
             }
           : c,
       ),

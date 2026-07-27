@@ -5,6 +5,7 @@ export const APP_DESCRIPTION =
 
 export const NAV_LINKS = [
   { label: "Features", href: "#features" },
+  { label: "Tools", href: "/tools" },
   { label: "Documents", href: "#documents" },
   { label: "AI Studio", href: "#ai-studio" },
   { label: "Pricing", href: "#pricing" },

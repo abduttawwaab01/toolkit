@@ -7,6 +7,7 @@ import { PlayerWaveform } from "./player-waveform";
 import { cssFilterFromEffects, cssTransformFromClip } from "@/lib/effects/index";
 import { TextCanvas } from "@/components/editor/text/text-canvas";
 import { OverlayRenderer } from "@/components/editor/player/overlay-renderer";
+import { getKeyframeTransforms } from "@/components/editor/ai/keyframe-animation-panel";
 
 /**
  * Preview Player
@@ -26,8 +27,14 @@ export function Player() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const { isPlaying, playhead, setPlayhead, setIsPlaying, selectedClipId, clips, project, previewMuted } =
-    useEditorStore();
+  const isPlaying = useEditorStore((s) => s.isPlaying);
+  const playhead = useEditorStore((s) => s.playhead);
+  const setPlayhead = useEditorStore((s) => s.setPlayhead);
+  const setIsPlaying = useEditorStore((s) => s.setIsPlaying);
+  const selectedClipId = useEditorStore((s) => s.selectedClipId);
+  const previewMuted = useEditorStore((s) => s.previewMuted);
+  const clips = useEditorStore((s) => s.clips);
+  const project = useEditorStore((s) => s.project);
 
   const selectedClip = clips.find((c) => c.id === selectedClipId);
   const videoSrc = selectedClip?.src || null;
@@ -35,12 +42,23 @@ export function Player() {
   const clipFilterStyle = useMemo(() => {
     if (!selectedClip) return {};
     const filter = cssFilterFromEffects(selectedClip.effects);
-    const transform = cssTransformFromClip(selectedClip);
+    const baseTransform = cssTransformFromClip(selectedClip);
+    const kfTransforms = getKeyframeTransforms(
+      selectedClip.animationKeyframes,
+      selectedClip.duration,
+      Math.max(0, playhead - selectedClip.startTime),
+    );
+
+    const mergedClip = { ...selectedClip, ...kfTransforms };
+    const kfTransform = cssTransformFromClip(mergedClip);
+    const transform = kfTransform || baseTransform;
+
     return {
       filter: filter || undefined,
       transform: transform || undefined,
+      opacity: kfTransforms.opacity !== undefined ? kfTransforms.opacity : undefined,
     };
-  }, [selectedClip]);
+  }, [selectedClip, playhead]);
 
   // ─── Sync: store → video (external playhead/timeline seek) ───
   useEffect(() => {

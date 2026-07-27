@@ -32,6 +32,14 @@ model User {
   subscription Subscription?
   purchaseRequests CreditPurchaseRequest[]
   creditSpends    CreditSpendLog[]
+  collaborations ProjectCollaborator[]
+  comments        Comment[]
+  activities      ProjectActivity[]
+  presence        UserPresence?
+  apiKeys         ApiKey[]
+  ownedWorkspaces Workspace[]
+  workspaceMemberships WorkspaceMember[]
+  authoredTemplates CommunityTemplate[]
 }
 
 model Subscription {
@@ -60,11 +68,72 @@ model Project {
   size         BigInt   @default(0)
   thumbnailUrl String?
   metadata     Json     @default("{}")
+  isShared     Boolean  @default(false)
+  shareLink    String?  @unique
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  files ProjectFile[]
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files        ProjectFile[]
+  collaborators ProjectCollaborator[]
+  comments     Comment[]
+  activities   ProjectActivity[]
+}
+
+model ProjectCollaborator {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String
+  role      String   @default("editor")
+  invitedAt DateTime @default(now())
+  acceptedAt DateTime?
+  invitedBy String
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String
+  content   String
+  timeCode  Float?
+  resolved  Boolean  @default(false)
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent  Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[] @relation("CommentReplies")
+}
+
+model ProjectActivity {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String
+  action    String
+  entity    String?
+  entityId  String?
+  details   Json?
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserPresence {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  projectId  String?
+  lastActive DateTime @default(now())
+  cursorPos  Json?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model ProjectFile {
@@ -212,4 +281,85 @@ model CreditSpendLog {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model RateLimit {
+  id          String   @id @default(uuid())
+  key         String
+  windowStart DateTime
+  count       Int      @default(0)
+  updatedAt   DateTime @updatedAt
+
+  @@unique([key, windowStart])
+}
+
+model JobQueue {
+  id          String    @id @default(uuid())
+  type        String
+  payload     Json      @default("{}")
+  status      String    @default("PENDING")
+  priority    Int       @default(0)
+  scheduledAt DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  error       String?
+  retryCount  Int       @default(0)
+  maxRetries  Int       @default(3)
+  createdAt   DateTime  @default(now())
+}
+
+model ApiKey {
+  id        String    @id @default(uuid())
+  userId    String
+  name      String
+  key       String    @unique
+  scopes    String    @default("[\"read\"]")
+  lastUsed  DateTime?
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Workspace {
+  id        String            @id @default(uuid())
+  name      String
+  ownerId   String
+  plan      String            @default("FREE")
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  owner   User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  members WorkspaceMember[]
+}
+
+model WorkspaceMember {
+  id          String   @id @default(uuid())
+  workspaceId String
+  userId      String
+  role        String   @default("MEMBER")
+  storageUsed BigInt   @default(0)
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+}
+
+model CommunityTemplate {
+  id           String   @id @default(uuid())
+  name         String
+  description  String?
+  thumbnailUrl String?
+  trackData    Json
+  authorId     String
+  isPublic     Boolean  @default(true)
+  usageCount   Int      @default(0)
+  likes        Int      @default(0)
+  category     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
 }

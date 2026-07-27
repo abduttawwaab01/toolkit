@@ -1,11 +1,14 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { Search, Filter, Grid, List, Loader2, AlertCircle, FolderOpen } from "lucide-react";
+import { Search, Filter, Grid, List, Loader2, AlertCircle, FolderOpen, Scissors } from "lucide-react";
 import { MediaItem } from "./media-item";
 import { MediaUpload } from "./media-upload";
 import { useMediaLibrary } from "./hooks/use-media-library";
 import { useMediaUpload } from "./hooks/use-media-upload";
+import { useEditorStore } from "@/lib/editor-store";
+import { useToast } from "@/components/ui/toast/toast";
+import { separateAudioStems } from "@/lib/ai/stem-separation";
 import type { MediaItem as MediaItemType } from "@/types/media";
 
 function detectType(mime: string): "video" | "audio" | "image" {
@@ -34,6 +37,8 @@ interface MediaGridProps {
 }
 
 export function MediaGrid({ userId, isGuest, onAddToTimeline, onEditImage }: MediaGridProps) {
+  const toast = useToast();
+  const store = useEditorStore;
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const { items, loading, error, search, setSearch, refresh, deleteItem } = useMediaLibrary({
@@ -43,6 +48,46 @@ export function MediaGrid({ userId, isGuest, onAddToTimeline, onEditImage }: Med
   const { uploads, uploadFile, cancelUpload } = useMediaUpload();
   const [selectedItem, setSelectedItem] = useState<MediaItemType | null>(null);
   const [localFiles, setLocalFiles] = useState<LocalFile[]>([]);
+
+  const handleSeparate = useCallback(async (item: MediaItemType) => {
+    try {
+      const res = await fetch(item.url);
+      const blob = await res.blob();
+      const file = new File([blob], item.name, { type: blob.type || "audio/wav" });
+      const result = await separateAudioStems(file, { stems: "4" });
+      const state = store.getState();
+      const audioTrack = state.tracks.find((t: any) => t.type === "audio");
+      if (audioTrack && result.stems) {
+        for (const [stemName, dataUri] of Object.entries(result.stems)) {
+          const byteString = atob(dataUri.split(",")[1]);
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+          const stemBlob = new Blob([ab], { type: "audio/wav" });
+          const url = URL.createObjectURL(stemBlob);
+          state.addClip({
+            trackId: audioTrack.id,
+            type: "audio",
+            name: `${item.name.replace(/\.[^.]+$/, "")} - ${stemName}`,
+            src: url,
+            thumbnail: null,
+            startTime: state.playhead,
+            duration: 10,
+            trimStart: 0, trimEnd: 0,
+            speed: 1, volume: 1,
+            volumeKeyframes: [],
+            effects: [],
+            opacity: 1, scale: 1, rotation: 0, positionX: 0, positionY: 0,
+          });
+        }
+        toast.success("Stems added", `${Object.keys(result.stems).length} stems added to timeline`);
+      } else if (!audioTrack) {
+        toast.error("No audio track", "Add an audio track first");
+      }
+    } catch (err: any) {
+      toast.error("Separation failed", err.message || "Could not separate stems");
+    }
+  }, [toast, store]);
 
   const handleUpload = useCallback(
     async (files: File[]) => {
@@ -200,6 +245,7 @@ export function MediaGrid({ userId, isGuest, onAddToTimeline, onEditImage }: Med
                 onSelect={setSelectedItem}
                 onAddToTimeline={onAddToTimeline}
                 onEditImage={onEditImage}
+                onSeparate={item.type === "audio" ? handleSeparate : undefined}
               />
             ))}
           </div>

@@ -83,14 +83,14 @@ export function ExportDialog() {
 
   const estimatedSize = useMemo(() => {
     const { videoBitrate, audioBitrate, format, framerate, resolution } = settings;
-    const dur = 30;
+    const dur = Math.max(1, projectDuration || 30);
     const res = RESOLUTIONS[resolution];
     const pixels = res.width * res.height;
     const vidSize = (videoBitrate * 1000 / 8) * dur;
     const audSize = audioBitrate ? (audioBitrate * 1000 / 8) * dur : 0;
     const total = vidSize + audSize;
     return total;
-  }, [settings]);
+  }, [settings, projectDuration]);
 
   const applyPreset = useCallback((preset: ExportPresetDefinition) => {
     setSettings((s) => ({ ...s, ...preset.settings }));
@@ -151,7 +151,7 @@ export function ExportDialog() {
             format: completed.settings.format,
             resolution: completed.settings.resolution,
             fileSize,
-            duration: 30,
+            duration: projectDuration,
             url,
             thumbnailUrl: null,
             createdAt: Date.now(),

@@ -185,9 +185,8 @@ export async function transcribeAudioFile(
   apiKey: string,
   language?: string,
 ): Promise<{ text: string; segments: { start: number; end: number; text: string }[] }> {
-  // Convert blob to base64
   const buffer = await audioBlob.arrayBuffer();
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+  const base64 = arrayBufferToBase64(buffer);
 
   const res = await fetch("/api/ai", {
     method: "POST",
@@ -206,4 +205,15 @@ export async function transcribeAudioFile(
 
   const data = await res.json();
   return data.data || { text: "", segments: [] };
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const CHUNK_SIZE = 8192;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.length));
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
 }

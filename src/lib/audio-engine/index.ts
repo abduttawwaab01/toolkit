@@ -327,17 +327,39 @@ export function createNoiseRemover(audioCtx: AudioContext, params: {
 
   let chain: AudioNode = input;
 
-  // Noise gate
+  // Noise gate using envelope follower
   if ((params.gateThreshold ?? -60) > -80) {
-    const gate = audioCtx.createDynamicsCompressor();
-    gate.threshold.value = params.gateThreshold ?? -60;
-    gate.knee.value = 5;
-    gate.ratio.value = 20;
-    gate.attack.value = params.gateAttack ?? 0.01;
-    gate.release.value = params.gateRelease ?? 0.2;
-    chain.connect(gate);
-    chain = gate;
-    nodes.push(gate);
+    const thresholdDb = params.gateThreshold ?? -50;
+    const threshold = Math.pow(10, thresholdDb / 20);
+    const attackTime = params.gateAttack ?? 0.01;
+    const releaseTime = params.gateRelease ?? 0.3;
+    const gateInput = audioCtx.createGain();
+    const gateOutput = audioCtx.createGain();
+    const processor = audioCtx.createScriptProcessor(256, 1, 1);
+    let envelope = 0;
+    processor.onaudioprocess = (e) => {
+      const ch = e.inputBuffer.getChannelData(0);
+      const out = e.outputBuffer.getChannelData(0);
+      let peak = 0;
+      for (let i = 0; i < ch.length; i++) {
+        const abs = Math.abs(ch[i]);
+        if (abs > peak) peak = abs;
+      }
+      const dt = ch.length / audioCtx.sampleRate;
+      if (peak > threshold) {
+        envelope = Math.min(1, envelope + dt / Math.max(attackTime, 0.001));
+      } else {
+        envelope = Math.max(0, envelope - dt / Math.max(releaseTime, 0.001));
+      }
+      for (let i = 0; i < ch.length; i++) {
+        out[i] = ch[i] * envelope;
+      }
+    };
+    chain.connect(gateInput);
+    gateInput.connect(processor);
+    processor.connect(gateOutput);
+    chain = gateOutput;
+    nodes.push(gateInput, gateOutput);
   }
 
   // Hum removal (notch at 50/60 Hz)
@@ -387,31 +409,45 @@ export function createBgMusicRemover(audioCtx: AudioContext, params: {
 
   let chain: AudioNode = input;
 
-  // Center channel extraction (karaoke effect)
-  if ((params.strength ?? 0) > 0 && (params.centerWidth ?? 0) > 0) {
-    // Split into left/right and cancel center
+  // Mid/Side decoding for center channel extraction
+  if ((params.strength ?? 0) > 0) {
     const splitter = audioCtx.createChannelSplitter(2);
     const merger = audioCtx.createChannelMerger(2);
-    const leftGain = audioCtx.createGain();
-    const rightGain = audioCtx.createGain();
-    const invertGain = audioCtx.createGain();
 
+    // M = (L + R) / 2  (center-panned: vocals, bass)
+    // S = (L - R) / 2  (side-panned: guitars, pads, fx)
+    const midGain = audioCtx.createGain();
+    const sideGain = audioCtx.createGain();
+    const polarityInverter = audioCtx.createGain();
+    polarityInverter.gain.value = -1;
+
+    const preserveVocals = params.preserveVocals ?? 0.5;
+    const centerWidth = params.centerWidth ?? 0.5;
     const strength = params.strength ?? 0.5;
-    leftGain.gain.value = 1;
-    rightGain.gain.value = 1;
-    invertGain.gain.value = -strength;
+
+    // When preserving vocals (mode="vocals"): keep mid channel, attenuate side
+    // When removing bg music (mode="music"): keep side channel, attenuate mid
+    const midScale = preserveVocals * strength;
+    const sideScale = (1 - preserveVocals) * strength * centerWidth;
+
+    midGain.gain.value = midScale * 0.7;
+    sideGain.gain.value = sideScale;
 
     chain.connect(splitter);
-    splitter.connect(leftGain, 0);
-    splitter.connect(rightGain, 1);
-    leftGain.connect(merger, 0, 0);
-    rightGain.connect(merger, 0, 1);
-    // Invert one channel to cancel center
-    leftGain.connect(invertGain);
-    invertGain.connect(merger, 0, 1);
+    // Mid: L + R
+    splitter.connect(midGain, 0, 0);
+    splitter.connect(midGain, 1, 0);
+    midGain.connect(merger, 0, 0);
+    midGain.connect(merger, 0, 1);
+    // Side: L + (-R)
+    splitter.connect(sideGain, 0, 0);
+    splitter.connect(polarityInverter, 1, 0);
+    polarityInverter.connect(sideGain);
+    sideGain.connect(merger, 0, 0);
+    sideGain.connect(merger, 0, 1);
 
     chain = merger;
-    nodes.push(splitter, merger, leftGain, rightGain, invertGain);
+    nodes.push(splitter, merger, midGain, sideGain, polarityInverter);
   }
 
   // Low cut to remove bass

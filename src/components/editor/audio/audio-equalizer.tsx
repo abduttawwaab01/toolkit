@@ -9,7 +9,8 @@ interface EqualizerBand {
 }
 
 interface AudioEqualizerProps {
-  onChange: (bands: number[]) => void;
+  onChange: (bands: { freq: number; gain: number }[]) => void;
+  initialBands?: { freq: number; gain: number }[];
 }
 
 const DEFAULT_BANDS: EqualizerBand[] = [
@@ -25,8 +26,13 @@ const DEFAULT_BANDS: EqualizerBand[] = [
   { freq: "16k", label: "16K", gain: 0 },
 ];
 
-export function AudioEqualizer({ onChange }: AudioEqualizerProps) {
-  const [bands, setBands] = useState<EqualizerBand[]>(DEFAULT_BANDS);
+export function AudioEqualizer({ onChange, initialBands }: AudioEqualizerProps) {
+  const [bands, setBands] = useState<EqualizerBand[]>(() => {
+    if (initialBands && initialBands.length === DEFAULT_BANDS.length) {
+      return DEFAULT_BANDS.map((b, i) => ({ ...b, gain: initialBands[i]?.gain ?? 0 }));
+    }
+    return DEFAULT_BANDS;
+  });
   const [expanded, setExpanded] = useState(false);
   const [dragging, setDragging] = useState<number | null>(null);
 
@@ -43,7 +49,7 @@ export function AudioEqualizer({ onChange }: AudioEqualizerProps) {
     (index: number, gain: number) => {
       const newBands = bands.map((b, i) => (i === index ? { ...b, gain: Math.max(-12, Math.min(12, gain)) } : b));
       setBands(newBands);
-      onChange(newBands.map((b) => b.gain));
+      onChange(newBands.map((b) => ({ freq: Number(b.freq), gain: b.gain })));
     },
     [bands, onChange],
   );
@@ -81,7 +87,7 @@ export function AudioEqualizer({ onChange }: AudioEqualizerProps) {
   const handleReset = () => {
     const resetBands = bands.map((b) => ({ ...b, gain: 0 }));
     setBands(resetBands);
-    onChange(resetBands.map((b) => b.gain));
+    onChange(resetBands.map((b) => ({ freq: Number(b.freq), gain: b.gain })));
   };
 
   if (!expanded) {

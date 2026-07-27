@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { useEditorStore } from "@/lib/editor-store";
 import { getTextStyleCss, getAnimationCss } from "@/lib/text/index";
 
-export function TextCanvas() {
-  const { clips, playhead } = useEditorStore();
+export const TextCanvas = memo(function TextCanvas() {
+  const clips = useEditorStore((s) => s.clips);
+  const playhead = useEditorStore((s) => s.playhead);
 
   // Find all text clips that should be visible based on playhead
   const visibleTexts = useMemo(() => {
@@ -90,4 +91,4 @@ export function TextCanvas() {
       })}
     </div>
   );
-}
+});

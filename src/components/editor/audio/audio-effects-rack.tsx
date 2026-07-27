@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef } from "react";
 import { useEditorStore } from "@/lib/editor-store";
 import { useToast } from "@/components/ui/toast/toast";
-import { decodeAudioFile, createVoiceChainer, createToneEnhancer, createNoiseRemover, createBgMusicRemover } from "@/lib/audio-engine/index";
+import { decodeAudioFile, audioBufferToWav, createVoiceChainer, createToneEnhancer, createNoiseRemover, createBgMusicRemover } from "@/lib/audio-engine/index";
 import { Mic, Music, Volume2, Waves, Radio, Sparkles, Play, Square, RotateCcw, Upload, Download } from "lucide-react";
 
 type EffectCategory = "voice" | "tone" | "noise" | "bgm";
@@ -162,7 +162,7 @@ export function AudioEffectsRack() {
       const renderedBuffer = await offlineCtx.startRendering();
 
       // Convert to WAV blob
-      const wavBlob = audioBufferToWavBlob(renderedBuffer);
+      const wavBlob = audioBufferToWav(renderedBuffer);
       const url = URL.createObjectURL(wavBlob);
       setPreviewUrl(url);
 
@@ -316,41 +316,4 @@ export function AudioEffectsRack() {
       )}
     </div>
   );
-}
-
-function audioBufferToWavBlob(buffer: AudioBuffer): Blob {
-  const numChannels = buffer.numberOfChannels;
-  const sampleRate = buffer.sampleRate;
-  const bytesPerSample = 2;
-  const blockAlign = numChannels * bytesPerSample;
-  const dataSize = buffer.length * blockAlign;
-  const headerSize = 44;
-  const totalSize = headerSize + dataSize;
-  const arrayBuffer = new ArrayBuffer(totalSize);
-  const view = new DataView(arrayBuffer);
-
-  const w = (offset: number, string: string) => { for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i)); };
-  w(0, "RIFF");
-  view.setUint32(4, totalSize - 8, true);
-  w(8, "WAVE");
-  w(12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, numChannels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * blockAlign, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, 16, true);
-  w(36, "data");
-  view.setUint32(40, dataSize, true);
-
-  let offset = 44;
-  for (let i = 0; i < buffer.length; i++) {
-    for (let ch = 0; ch < numChannels; ch++) {
-      const s = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
-      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-      offset += 2;
-    }
-  }
-  return new Blob([arrayBuffer], { type: "audio/wav" });
 }

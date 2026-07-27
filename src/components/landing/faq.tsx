@@ -12,7 +12,7 @@ const faqs = [
   },
   {
     q: "What AI models does ToolKit use?",
-    a: "We use a combination of best-in-class models: our own fine-tuned models plus OpenAI, ElevenLabs, Replicate, and self-hosted Whisper. The system intelligently routes tasks to the optimal model.",
+    a: "We use a combination of best-in-class local and cloud AI models: DeepFilterNet3 for audio denoising, Demucs for stem separation, local ONNX models for background removal, plus OpenAI and ElevenLabs for text and speech tasks. All audio processing runs locally on our servers — zero external API costs.",
   },
   {
     q: "How long are my files stored?",
