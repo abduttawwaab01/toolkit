@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     // Delete from DB
     await db.projectFile.delete({ where: { id: fileId } });
     const user = await db.user.findUnique({ where: { id: userId } });
-    const newStorage = Math.max(0, (user?.storageUsed || 0) - Number(file.size));
+    const newStorage = Math.max(0, Number(user?.storageUsed || 0) - Number(file.size));
     await db.user.update({ where: { id: userId }, data: { storageUsed: newStorage } });
 
     return NextResponse.json({ success: true });
