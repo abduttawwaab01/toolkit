@@ -121,6 +121,7 @@ export async function POST(request: Request) {
         userId,
         feature: "export",
         credits: creditsNeeded,
+        balance: creditsNeeded,
         reason: `Export: ${durationMinutes}min video`,
       },
     });
