@@ -88,7 +88,7 @@ export async function POST(request: Request) {
 
     if (limits.withinFreeLimit) {
       await db.creditSpendLog.create({
-        data: { userId, feature: "export", credits: 0, reason: "Free export" },
+        data: { userId, feature: "export", credits: 0, balance: 0, reason: "Free export" },
       });
       return jsonResponse({ success: true, free: true, message: "Free export used" });
     }
