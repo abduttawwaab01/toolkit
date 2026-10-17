@@ -92,6 +92,7 @@ export async function PUT(req: NextRequest) {
           userId: request.userId,
           feature: "purchase",
           credits: request.credits,
+          balance: request.credits,
           reason: "purchase approved",
         },
       }),
