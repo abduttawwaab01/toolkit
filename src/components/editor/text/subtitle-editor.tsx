@@ -97,11 +97,6 @@ export function SubtitleEditor({ clipId }: SubtitleEditorProps) {
           >
             Import SRT
           </button>
-        </div>
-            className="text-[9px] px-2 py-0.5 rounded glass text-text-secondary hover:text-text-primary"
-          >
-            Import SRT
-          </button>
           <button
             onClick={handleSrtExport}
             className="text-[9px] px-2 py-0.5 rounded glass text-text-secondary hover:text-text-primary"
