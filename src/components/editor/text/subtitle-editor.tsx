@@ -36,7 +36,6 @@ export function SubtitleEditor({ clipId }: SubtitleEditorProps) {
 
   const addSubtitleAtPlayhead = () => {
     addSubtitle();
-    toast?.success("Subtitle added", "At current playhead");
   };
 
   const updateSub = (id: string, updates: Partial<Subtitle>) => {
