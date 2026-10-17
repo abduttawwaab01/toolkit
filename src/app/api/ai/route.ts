@@ -37,7 +37,13 @@ export async function POST(req: NextRequest) {
 
     switch (feature) {
       case "transcribe": {
-        const audioBuffer = Buffer.from(body.audio, "base64");
+        let audioData = body.audio;
+        if (!audioData && body.r2Key) {
+          const { downloadFromR2 } = await import("@/lib/r2");
+          const buf = await downloadFromR2(body.r2Key);
+          audioData = buf.toString("base64");
+        }
+        const audioBuffer = Buffer.from(audioData, "base64");
         result = await aiRouter.transcribe(audioBuffer, { language: body.language });
         break;
       }
@@ -62,7 +68,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (userId) {
-      await db.user.update({ where: { id: userId }, data: { creditsBalance: { decrement: 1 } } });
+      const updated = await db.user.updateMany({
+        where: { id: userId, creditsBalance: { gte: 1 } },
+        data: { creditsBalance: { decrement: 1 } },
+      });
+      if (updated.count === 0) {
+        return NextResponse.json({ error: "Insufficient credits" }, { status: 402 });
+      }
     }
 
     await db.aiUsageLog.create({

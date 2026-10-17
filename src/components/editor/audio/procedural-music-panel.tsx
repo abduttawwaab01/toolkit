@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Music, Play, Square, Plus, RefreshCw, Loader2 } from "lucide-react";
 import { useEditorStore } from "@/lib/editor-store";
 import { MUSIC_GENRES, generateBackgroundMusic } from "@/lib/procedural-audio";
@@ -11,6 +11,7 @@ export function ProceduralMusicPanel() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(30);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const addClip = useEditorStore((s) => s.addClip);
   const tracks = useEditorStore((s) => s.tracks);
@@ -31,13 +32,13 @@ export function ProceduralMusicPanel() {
   const togglePreview = () => {
     if (!previewUrl) return;
     if (isPlaying) {
-      const audio = document.querySelector<HTMLAudioElement>("#music-preview");
-      audio?.pause();
+      audioRef.current?.pause();
+      audioRef.current = null;
       setIsPlaying(false);
     } else {
       const audio = new Audio(previewUrl);
-      audio.id = "music-preview";
-      audio.onended = () => setIsPlaying(false);
+      audio.onended = () => { setIsPlaying(false); audioRef.current = null; };
+      audioRef.current = audio;
       audio.play();
       setIsPlaying(true);
     }

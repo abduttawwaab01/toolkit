@@ -12,6 +12,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields: name, contentType, size, userId" }, { status: 400 });
     }
 
+    const allowedTypes = /^(image|video|audio)\//;
+    if (!allowedTypes.test(contentType)) {
+      return NextResponse.json({ error: "File type not allowed" }, { status: 400 });
+    }
+
     const fileSize = BigInt(size);
     const MAX_FILE_SIZE = BigInt(524288000);
     if (fileSize > MAX_FILE_SIZE) {

@@ -25,7 +25,10 @@ export const PlayerWaveform = memo(function PlayerWaveform({ isPlaying }: Player
   const effectRevision = useEditorStore((s) => {
     const clip = s.clips.find((c) => c.id === s.selectedClipId);
     const track = clip ? s.tracks.find((t) => t.id === clip.trackId) : null;
-    return track?.audioEffects.map((e) => `${e.type}:${e.enabled}:${JSON.stringify(e.params)}`).join("|") ?? "";
+    const effectsStr = track?.audioEffects.map((e) => `${e.type}:${e.enabled}:${JSON.stringify(e.params)}`).join("|") ?? "";
+    const eqStr = track?.eqBands?.map((b) => `${b.freq}:${b.gain}`).join(",") ?? "";
+    const clipStr = clip ? `vol:${clip.volume}:vf:${JSON.stringify(clip.volumeKeyframes)}` : "";
+    return `${effectsStr}|eq:${eqStr}|${clipStr}`;
   });
 
   useEffect(() => {
@@ -94,7 +97,24 @@ export const PlayerWaveform = memo(function PlayerWaveform({ isPlaying }: Player
       }
 
       const chain = buildEffectChain(audioCtxRef.current, source, effects);
-      chain.output.connect(trackGain);
+
+      // Apply EQ bands if present
+      let eqOutput: AudioNode = chain.output;
+      const eqBands = track?.eqBands ?? [];
+      const activeEqBands = eqBands.filter((b) => b.gain !== 0);
+      if (activeEqBands.length > 0) {
+        for (const band of activeEqBands) {
+          const filter = audioCtxRef.current.createBiquadFilter();
+          filter.type = band.freq <= 125 ? "lowshelf" : band.freq >= 8000 ? "highshelf" : "peaking";
+          filter.frequency.value = band.freq;
+          filter.gain.value = band.gain;
+          filter.Q.value = 1.4;
+          eqOutput.connect(filter);
+          eqOutput = filter;
+        }
+      }
+
+      eqOutput.connect(trackGain);
       trackGain.connect(clipGain);
       clipGain.connect(masterGain);
       masterGain.connect(analyser);
@@ -114,14 +134,34 @@ export const PlayerWaveform = memo(function PlayerWaveform({ isPlaying }: Player
       if (masterGainRef.current) {
         masterGainRef.current.gain.value = state.masterVolume;
       }
-      // Apply track volume, clip volume, mute/solo
+      // Apply track volume, clip volume, mute/solo, and volume keyframes
       if (trackGainRef.current && clipGainRef.current) {
         const clip = state.clips.find((c) => c.id === state.selectedClipId);
         const track = clip ? state.tracks.find((t) => t.id === clip.trackId) : null;
         const hasSolo = state.tracks.some((t) => t.solo);
         const isMuted = track ? track.muted || (hasSolo && !track.solo) : false;
         trackGainRef.current.gain.value = isMuted ? 0 : (track?.volume ?? 1);
-        clipGainRef.current.gain.value = clip?.volume ?? 1;
+
+        // Interpolate volume keyframes
+        let clipVolume = clip?.volume ?? 1;
+        if (clip?.volumeKeyframes && clip.volumeKeyframes.length > 0) {
+          const relTime = state.playhead - clip.startTime;
+          const keyframes = clip.volumeKeyframes;
+          // Find surrounding keyframes
+          let prevKf = { time: 0, value: clip.volume };
+          let nextKf = { time: clip.duration / clip.speed, value: clip.volume };
+          for (let i = 0; i < keyframes.length; i++) {
+            if (keyframes[i].time <= relTime) prevKf = keyframes[i];
+            if (keyframes[i].time >= relTime && keyframes[i].time < nextKf.time) nextKf = keyframes[i];
+          }
+          if (prevKf.time === nextKf.time) {
+            clipVolume = prevKf.value;
+          } else {
+            const t = (relTime - prevKf.time) / (nextKf.time - prevKf.time);
+            clipVolume = prevKf.value + (nextKf.value - prevKf.value) * t;
+          }
+        }
+        clipGainRef.current.gain.value = clipVolume;
       }
 
       if (analyserRef.current) {

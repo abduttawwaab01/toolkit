@@ -28,7 +28,7 @@ export function VideoUpscalePanel() {
     setResultUrl(null);
 
     try {
-      const result = await upscaleVideoAI(file, {
+      const result = await upscaleVideoAI(file, undefined, {
         scale,
         onProgress: setProgress,
       });

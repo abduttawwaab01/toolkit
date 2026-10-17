@@ -65,7 +65,7 @@ export function StemSeparationPanel() {
     setJobId(null);
 
     try {
-      const separationResult = await separateAudioStems(file, {
+      const separationResult = await separateAudioStems(file, undefined, {
         stems,
         onProgress: setProgress,
       });
@@ -173,6 +173,13 @@ export function StemSeparationPanel() {
             4 Stems
           </button>
         </div>
+      </div>
+
+      {/* Best vocal removal ever — one-click modes */}
+      <div className="flex gap-2 flex-wrap">
+        <button onClick={() => { setStems("2"); toast.success("Mode set", "Vocal removal optimized (2-stem)" ); }} className="px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-rose-500 to-orange-400 text-white shadow-lg shadow-rose-500/20 hover:scale-105 transition">🎤 Remove Vocals</button>
+        <button onClick={() => { setStems("2"); toast.success("Mode set", "Instrumental removal optimized"); }} className="px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-violet-500 to-indigo-400 text-white shadow-lg shadow-violet-500/20 hover:scale-105 transition">🎵 Remove Music</button>
+        <button onClick={() => { setStems("4"); toast.success("Mode set", "Full stem separation (best quality)"); }} className="px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-400 to-teal-300 text-black shadow-lg shadow-emerald-400/20 hover:scale-105 transition">✨ 4-Stem Pro</button>
       </div>
 
       <p className="text-[8px] text-text-tertiary leading-relaxed">

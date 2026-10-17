@@ -1,10 +1,8 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.config";
 import { jsonResponse } from "@/lib/json";
-import { PrismaClient } from "@prisma/client";
+import { db } from "@/lib/db";
 import { z } from "zod";
-
-const prisma = new PrismaClient();
 
 const updateSchema = z.object({
   role: z.string(),
@@ -23,7 +21,7 @@ function platformKey(role: string, field: string) {
 async function getExportLimits(role: string) {
   const getInt = async (key: string, fallback: number) => {
     try {
-      const s = await prisma.platformSetting.findUnique({ where: { key } });
+      const s = await db.platformSetting.findUnique({ where: { key } });
       return s ? parseInt(s.value, 10) || fallback : fallback;
     } catch { return fallback; }
   };
@@ -81,7 +79,7 @@ export async function PUT(request: Request) {
     for (const [field, value] of Object.entries(updates)) {
       if (value !== undefined) {
         const key = platformKey(targetRole, field);
-        await prisma.platformSetting.upsert({
+        await db.platformSetting.upsert({
           where: { key },
           update: { value: String(value) },
           create: { key, value: String(value), label: `${targetRole} - ${labels[field] || field}`, category: "export-limits", type: "number" },

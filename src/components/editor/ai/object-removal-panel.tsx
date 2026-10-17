@@ -215,7 +215,7 @@ export function ObjectRemovalPanel({ imageUrl: initialImageUrl, onApply }: Objec
 
       const maskBlob = await maskCanvasToBlob(maskCanvas);
 
-      const result = await removeObjectAI(imgFile, maskBlob, {
+      const result = await removeObjectAI(imgFile, maskBlob, undefined, {
         onProgress: setProgress,
       });
 

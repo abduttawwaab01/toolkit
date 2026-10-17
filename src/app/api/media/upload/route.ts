@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import { uploadFile } from "@/lib/r2";
 import { scheduleAutoDelete } from "@/lib/auto-delete";
 import { jsonResponse } from "@/lib/json";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth.config";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -13,13 +15,13 @@ const MAX_DIRECT_SIZE = 4 * 1024 * 1024; // 4MB — safe for Vercel Hobby
 const MAX_FILE_SIZE = 524288000;
 
 export async function POST(req: NextRequest) {
-  const headerUserId = req.headers.get("x-user-id") || req.nextUrl.searchParams.get("userId");
-  const role = req.headers.get("x-user-role") || "GUEST";
+  const session = await getServerSession(authOptions);
+  const effectiveUserId = (session?.user as any)?.id as string | undefined;
 
-  if (role === "GUEST" && !headerUserId) {
+  if (!effectiveUserId) {
     return jsonResponse(
-      { error: "Guest uploads are handled in the browser. Please sign up for persistent storage." },
-      { status: 403 },
+      { error: "Unauthorized" },
+      { status: 401 },
     );
   }
 
@@ -34,16 +36,12 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData();
     const file = formData.get("file") as File;
-    const formUserId = formData.get("userId") as string | null;
     const projectId = formData.get("projectId") as string | null;
-    const effectiveUserId = headerUserId || formUserId;
 
     if (!file) return jsonResponse({ error: "No file provided" }, { status: 400 });
     if (BigInt(file.size) > BigInt(MAX_FILE_SIZE)) {
       return jsonResponse({ error: "File size exceeds limit of 500 MB" }, { status: 413 });
     }
-
-    if (!effectiveUserId) return jsonResponse({ error: "Could not identify user" }, { status: 400 });
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const key = `${effectiveUserId}/${crypto.randomUUID()}-${file.name}`;

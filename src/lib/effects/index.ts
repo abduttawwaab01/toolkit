@@ -824,32 +824,76 @@ export function cssFilterFromEffects(effects: Effect[]): string {
         break;
       }
 
+      // ── Stylistic (CSS approximations) ──
+      case "chromatic-aberration":
+        filters.push(`blur(${Math.min((p.offset as number) * 0.15, 3)}px)`);
+        break;
+      case "glow":
+        filters.push(`brightness(${1 + (p.amount as number) / 200}) blur(${Math.min((p.radius as number) * 0.1, 5)}px)`);
+        break;
+
       // ── Effects that need canvas rendering (not pure CSS) ──
       // These return empty string for CSS filter but are handled in render pipeline
       case "vignette":
       case "film-grain":
-      case "chromatic-aberration":
-      case "glow":
       case "halftone":
+        break;
       case "lens-flare":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "light-leak":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "bloom":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "orbs":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "sun-flare":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "film-damage":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "fisheye":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "wave-distortion":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "glitch":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "barrel-distortion":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "mirror":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "duotone":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "edge-detect":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "threshold":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "lift-gamma-gain":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "color-balance":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "shadow-highlight":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "film-color-shift":
+        // Requires canvas overlay - not yet implemented
+        break;
       case "lut":
+        // Requires canvas overlay - not yet implemented
         break;
     }
   }

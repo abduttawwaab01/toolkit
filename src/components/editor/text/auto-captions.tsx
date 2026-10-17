@@ -27,24 +27,27 @@ export function AutoCaptions({ clipId }: AutoCaptionsProps) {
     setProgress("Loading audio...");
 
     try {
-      // Fetch audio and convert to base64
       const audioResp = await fetch(clip.src);
       const audioBlob = await audioResp.blob();
-      const audioBuffer = await audioBlob.arrayBuffer();
-      const audioBase64 = btoa(
-        new Uint8Array(audioBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ""),
-      );
 
       setProgress("Transcribing audio...");
+
+      // Try R2 path first — if the clip src is an R2 URL, extract the key
+      let body: Record<string, any> = { feature: "transcribe", language };
+      const r2Match = clip.src.match(/\/r2\/(.+)$/);
+      if (r2Match) {
+        body.r2Key = decodeURIComponent(r2Match[1]);
+      } else {
+        const audioBuffer = await audioBlob.arrayBuffer();
+        body.audio = btoa(
+          new Uint8Array(audioBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ""),
+        );
+      }
 
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          feature: "transcribe",
-          audio: audioBase64,
-          language,
-        }),
+        body: JSON.stringify(body),
       });
 
       const data = await res.json();

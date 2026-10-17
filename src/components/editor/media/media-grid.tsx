@@ -54,7 +54,7 @@ export function MediaGrid({ userId, isGuest, onAddToTimeline, onEditImage }: Med
       const res = await fetch(item.url);
       const blob = await res.blob();
       const file = new File([blob], item.name, { type: blob.type || "audio/wav" });
-      const result = await separateAudioStems(file, { stems: "4" });
+      const result = await separateAudioStems(file, userId, { stems: "4" });
       const state = store.getState();
       const audioTrack = state.tracks.find((t: any) => t.type === "audio");
       if (audioTrack && result.stems) {

@@ -90,13 +90,13 @@ function writeString(view: DataView, offset: number, str: string) {
 
 export async function separateAudioStems(
   audioFile: File,
+  userId: string | undefined,
   options: StemSeparationOptions = {},
 ): Promise<StemSeparationResult> {
   const { stems = "4", onProgress } = options;
 
   onProgress?.(5);
 
-  // Convert non-WAV to WAV for compatibility
   let file: File = audioFile;
   if (!audioFile.name.toLowerCase().endsWith(".wav")) {
     onProgress?.(8);
@@ -106,14 +106,25 @@ export async function separateAudioStems(
 
   onProgress?.(10);
 
-  const formData = new FormData();
-  formData.append("audio", file);
-  formData.append("mode", stems);
+  let response: Response;
 
-  const response = await fetch("/api/audio/separate", {
-    method: "POST",
-    body: formData,
-  });
+  if (userId) {
+    const { uploadToR2 } = await import("@/lib/file-upload-client");
+    const { key } = await uploadToR2(file, userId);
+    response = await fetch("/api/audio/separate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ r2Key: key, mode: stems }),
+    });
+  } else {
+    const formData = new FormData();
+    formData.append("audio", file);
+    formData.append("mode", stems);
+    response = await fetch("/api/audio/separate", {
+      method: "POST",
+      body: formData,
+    });
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: "Unknown error" }));

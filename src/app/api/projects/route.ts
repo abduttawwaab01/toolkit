@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth.config";
 
 export async function GET(req: NextRequest) {
   try {
-    const userId = req.nextUrl.searchParams.get("userId") || req.headers.get("x-user-id");
+    const session = await getServerSession(authOptions);
+    const userId = (session?.user as any)?.id;
     if (!userId) {
-      return NextResponse.json({ error: "User ID required" }, { status: 400 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const projectId = req.nextUrl.searchParams.get("id");

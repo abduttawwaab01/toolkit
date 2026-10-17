@@ -4,26 +4,31 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.config";
 import { db } from "@/lib/db";
 import { localUpscaleVideo } from "@/lib/ai/local-adapter";
+import { resolveFile, isBodyTooLarge } from "@/lib/r2-file-helper";
 
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const userId = (session?.user as any)?.id as string | undefined;
 
-    const formData = await req.formData();
-    const videoFile = formData.get("video") as File | null;
-    const scale = (formData.get("scale") as string) || "4";
+    if (isBodyTooLarge(req)) {
+      return NextResponse.json({
+        error: "File too large. Upload to R2 first via /api/media/presign, then POST with { r2Key }.",
+      }, { status: 413 });
+    }
 
-    if (!videoFile) {
+    const { file: fileResult, fields } = await resolveFile(req, "video");
+    if (!fileResult) {
       return NextResponse.json({ error: "No video file provided" }, { status: 400 });
     }
 
+    const scale = (fields.scale as string) || "4";
+
     const start = Date.now();
-    const arrayBuffer = await videoFile.arrayBuffer();
-    const videoBuffer = Buffer.from(arrayBuffer);
+    const videoBuffer = fileResult.buffer;
 
     // Try local Real-ESRGAN first (free)
-    const localResult = await localUpscaleVideo(videoBuffer, parseInt(scale) || 4);
+    const localResult = await localUpscaleVideo(fileResult.buffer, parseInt(scale) || 4);
 
     if (localResult) {
       const durationMs = Date.now() - start;
@@ -48,7 +53,7 @@ export async function POST(req: NextRequest) {
     }
 
     const base64Video = videoBuffer.toString("base64");
-    const dataUri = `data:${videoFile.type || "video/mp4"};base64,${base64Video}`;
+    const dataUri = `data:${fileResult.mimeType || "video/mp4"};base64,${base64Video}`;
 
     const output = await runReplicateModelByName(
       "nightmareai/real-esrgan:f121d640bd286e1fdc67f9799164c1d5be36ff74576ee11c803ae5b665dd46aa",

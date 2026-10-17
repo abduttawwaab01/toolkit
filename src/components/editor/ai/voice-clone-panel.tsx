@@ -41,7 +41,7 @@ export function VoiceClonePanel() {
         description: description.trim() || undefined,
         audioFiles: files,
         onProgress: setProgress,
-      });
+      }, undefined);
       setClonedVoiceId(result.voice_id);
       toast.success("Voice cloned", `"${result.name}" is ready to use`);
       setName("");

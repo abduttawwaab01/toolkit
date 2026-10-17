@@ -1,9 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.config";
 import { jsonResponse } from "@/lib/json";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { db } from "@/lib/db";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -12,7 +10,7 @@ export async function GET() {
     return jsonResponse({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const user = await prisma.user.findUnique({
+  const user = await db.user.findUnique({
     where: { id: userId },
     select: { creditsBalance: true, role: true },
   });

@@ -4,15 +4,22 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.config";
 import { db } from "@/lib/db";
 import { localRemoveObject } from "@/lib/ai/local-adapter";
+import { resolveMultipleFiles, isBodyTooLarge } from "@/lib/r2-file-helper";
 
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const userId = (session?.user as any)?.id as string | undefined;
 
-    const formData = await req.formData();
-    const imageFile = formData.get("image") as File | null;
-    const maskFile = formData.get("mask") as File | null;
+    if (isBodyTooLarge(req)) {
+      return NextResponse.json({
+        error: "Files too large. Upload to R2 first via /api/media/presign, then POST with { r2Key, maskR2Key }.",
+      }, { status: 413 });
+    }
+
+    const { files, fields } = await resolveMultipleFiles(req, ["image", "mask"]);
+    const imageFile = files.image;
+    const maskFile = files.mask;
 
     if (!imageFile) {
       return NextResponse.json({ error: "No image file provided" }, { status: 400 });
@@ -22,10 +29,8 @@ export async function POST(req: NextRequest) {
     }
 
     const start = Date.now();
-    const [imageBuffer, maskBuffer] = await Promise.all([
-      imageFile.arrayBuffer(),
-      maskFile.arrayBuffer(),
-    ]);
+    const imageBuffer = imageFile.buffer;
+    const maskBuffer = maskFile.buffer;
 
     // Try local LaMa first (free)
     const localResult = await localRemoveObject(
@@ -55,10 +60,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const base64Image = Buffer.from(imageBuffer).toString("base64");
-    const base64Mask = Buffer.from(maskBuffer).toString("base64");
-    const imageDataUri = `data:${imageFile.type || "image/png"};base64,${base64Image}`;
-    const maskDataUri = `data:${maskFile.type || "image/png"};base64,${base64Mask}`;
+    const base64Image = imageBuffer.toString("base64");
+    const base64Mask = maskBuffer.toString("base64");
+    const imageDataUri = `data:${imageFile.mimeType || "image/png"};base64,${base64Image}`;
+    const maskDataUri = `data:${maskFile.mimeType || "image/png"};base64,${base64Mask}`;
 
     const output = await runReplicateModelByName(
       "arielgold/lama",

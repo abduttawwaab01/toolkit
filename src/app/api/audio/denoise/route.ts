@@ -2,19 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.config";
 import { db } from "@/lib/db";
+import { resolveFile, isBodyTooLarge } from "@/lib/r2-file-helper";
 
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const userId = (session?.user as any)?.id as string | undefined;
 
-    const formData = await req.formData();
-    const audioFile = formData.get("audio") as File | null;
-    const denoiseOnly = formData.get("denoiseOnly") === "true";
+    if (isBodyTooLarge(req)) {
+      return NextResponse.json({
+        error: "File too large. Upload to R2 first via /api/media/presign, then POST with { r2Key }.",
+      }, { status: 413 });
+    }
 
-    if (!audioFile) {
+    const { file: fileResult, fields } = await resolveFile(req, "audio");
+    if (!fileResult) {
       return NextResponse.json({ error: "No audio file provided" }, { status: 400 });
     }
+
+    const denoiseOnly = fields.denoiseOnly === "true";
 
     if (userId) {
       const user = await db.user.findUnique({ where: { id: userId } });
@@ -24,8 +30,7 @@ export async function POST(req: NextRequest) {
     }
 
     const start = Date.now();
-    const arrayBuffer = await audioFile.arrayBuffer();
-    const audioBuffer = Buffer.from(arrayBuffer);
+    const audioBuffer = fileResult.buffer;
 
     const { denoiseWithDeepFilterNet } = await import("@/lib/audio-engine/denoise-server");
     const result = await denoiseWithDeepFilterNet(audioBuffer);

@@ -164,7 +164,7 @@ function htmlToRich(html: string): any {
   return { type: "doc", content };
 }
 
-export function convertContent(fromFormat: string, toFormat: string, content: string): string {
+export function convertContent(fromFormat: string, toFormat: string, content: string, opts?: { preserveFormatting?: boolean; preserveStructure?: boolean }): string {
   if (fromFormat === toFormat) return content;
 
   const key = `${fromFormat}->${toFormat}`;

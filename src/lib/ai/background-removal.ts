@@ -18,21 +18,33 @@ export interface BackgroundRemovalOptions {
  */
 export async function removeBackgroundAI(
   imageFile: File,
+  userId: string | undefined,
   options: BackgroundRemovalOptions = {},
 ): Promise<BackgroundRemovalResult> {
   const { onProgress } = options;
 
   onProgress?.(5);
 
-  const formData = new FormData();
-  formData.append("image", imageFile);
+  let response: Response;
 
-  onProgress?.(10);
-
-  const response = await fetch("/api/ai/remove-background", {
-    method: "POST",
-    body: formData,
-  });
+  if (userId) {
+    const { uploadToR2 } = await import("@/lib/file-upload-client");
+    const { key } = await uploadToR2(imageFile, userId);
+    onProgress?.(10);
+    response = await fetch("/api/ai/remove-background", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ r2Key: key }),
+    });
+  } else {
+    const formData = new FormData();
+    formData.append("image", imageFile);
+    onProgress?.(10);
+    response = await fetch("/api/ai/remove-background", {
+      method: "POST",
+      body: formData,
+    });
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: "Unknown error" }));

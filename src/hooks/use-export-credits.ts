@@ -35,7 +35,7 @@ export function useExportCredits() {
         const spendRes = await fetch("/api/credits/spend", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ durationMinutes: 0 }),
+          body: JSON.stringify({ durationMinutes }),
         });
         if (!spendRes.ok) throw new Error("Failed to record free export");
         return true;

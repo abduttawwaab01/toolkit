@@ -34,6 +34,11 @@ export function SubtitleEditor({ clipId }: SubtitleEditorProps) {
     updateSubs([...subs, newSub].sort((a, b) => a.start - b.start));
   };
 
+  const addSubtitleAtPlayhead = () => {
+    addSubtitle();
+    toast?.success("Subtitle added", "At current playhead");
+  };
+
   const updateSub = (id: string, updates: Partial<Subtitle>) => {
     updateSubs(subs.map((s) => (s.id === id ? { ...s, ...updates } : s)));
   };
@@ -82,12 +87,17 @@ export function SubtitleEditor({ clipId }: SubtitleEditorProps) {
         <div className="flex gap-1">
           <button
             onClick={addSubtitle}
-            className="text-[9px] px-2 py-0.5 rounded glass text-text-secondary hover:text-text-primary"
+            className="text-[9px] px-2 py-0.5 rounded glass bg-neon-cyan/10 text-neon-cyan font-bold hover:bg-neon-cyan/20"
           >
-            + Add
+            ➕ Add at Playhead
           </button>
           <button
             onClick={() => fileRef.current?.click()}
+            className="text-[9px] px-2 py-0.5 rounded glass text-text-secondary hover:text-text-primary"
+          >
+            Import SRT
+          </button>
+        </div>
             className="text-[9px] px-2 py-0.5 rounded glass text-text-secondary hover:text-text-primary"
           >
             Import SRT

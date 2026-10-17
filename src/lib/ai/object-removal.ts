@@ -19,22 +19,37 @@ export interface ObjectRemovalOptions {
 export async function removeObjectAI(
   imageFile: File,
   maskBlob: Blob,
+  userId: string | undefined,
   options: ObjectRemovalOptions = {},
 ): Promise<ObjectRemovalResult> {
   const { onProgress } = options;
 
   onProgress?.(5);
 
-  const formData = new FormData();
-  formData.append("image", imageFile);
-  formData.append("mask", maskBlob, "mask.png");
+  let response: Response;
 
-  onProgress?.(10);
-
-  const response = await fetch("/api/ai/remove-object", {
-    method: "POST",
-    body: formData,
-  });
+  if (userId) {
+    const { uploadToR2 } = await import("@/lib/file-upload-client");
+    const [imageKey, maskKey] = await Promise.all([
+      uploadToR2(imageFile, userId),
+      uploadToR2(new File([maskBlob], "mask.png", { type: "image/png" }), userId),
+    ]);
+    onProgress?.(10);
+    response = await fetch("/api/ai/remove-object", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ r2Key: imageKey.key, maskR2Key: maskKey.key }),
+    });
+  } else {
+    const formData = new FormData();
+    formData.append("image", imageFile);
+    formData.append("mask", maskBlob, "mask.png");
+    onProgress?.(10);
+    response = await fetch("/api/ai/remove-object", {
+      method: "POST",
+      body: formData,
+    });
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: "Unknown error" }));

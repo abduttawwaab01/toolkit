@@ -88,15 +88,17 @@ export function TimelineClip({ clip, track, trackIndex, onContextMenu }: Timelin
         }
 
         if (edge === "start") {
+          // dt is in timeline seconds; convert to source time using speed
+          const sourceDt = dt * originalSpeed;
+          let newTrimStart = originalTrimStart + sourceDt;
+          let newDuration = originalDuration - sourceDt;
           let newStartTime = originalStart + dt;
-          let newTrimStart = originalTrimStart + dt;
-          let newDuration = originalDuration - dt;
 
           if (newTrimStart < 0) {
             const excess = -newTrimStart;
             newTrimStart = 0;
-            newStartTime = originalStart + dt + excess;
-            newDuration = originalDuration - dt - excess;
+            newStartTime = originalStart + dt + excess / originalSpeed;
+            newDuration = originalDuration - sourceDt + excess;
           }
 
           if (snapEnabled) {
@@ -104,8 +106,8 @@ export function TimelineClip({ clip, track, trackIndex, onContextMenu }: Timelin
             if (snapTime !== null) {
               const snapDt = snapTime - originalStart;
               newStartTime = snapTime;
-              newTrimStart = Math.max(0, originalTrimStart + snapDt);
-              newDuration = originalDuration - snapDt;
+              newTrimStart = Math.max(0, originalTrimStart + snapDt * originalSpeed);
+              newDuration = originalDuration - snapDt * originalSpeed;
             }
           }
 
@@ -116,18 +118,20 @@ export function TimelineClip({ clip, track, trackIndex, onContextMenu }: Timelin
         }
 
         if (edge === "end") {
-          let newDuration = originalDuration + dt;
+          // dt is in timeline seconds; convert to source time using speed
+          const sourceDt = dt * originalSpeed;
+          let newDuration = originalDuration + sourceDt;
 
           if (snapEnabled) {
-            const edgeTime = originalStart + originalDuration + dt;
+            const edgeTime = originalStart + originalDuration / originalSpeed + dt;
             const snapTime = findTrimSnapPoint(edgeTime, clip.id, clips, playhead, zoom);
             if (snapTime !== null) {
-              newDuration = snapTime - originalStart;
+              newDuration = (snapTime - originalStart) * originalSpeed;
             }
           }
 
           newDuration = Math.max(0.1, newDuration);
-          const newTrimEnd = Math.max(0, originalTrimEnd - dt);
+          const newTrimEnd = Math.max(0, originalTrimEnd - sourceDt);
 
           setGhostTrim({ edge: "end", startTime: originalStart, duration: newDuration });
         }
@@ -209,9 +213,9 @@ export function TimelineClip({ clip, track, trackIndex, onContextMenu }: Timelin
             {clip.name}
           </span>
           <span className="text-[10px] text-text-tertiary">
-            {clip.duration.toFixed(1)}s
-            {clip.trimStart > 0 && ` · in:${clip.trimStart.toFixed(1)}s`}
-            {clip.trimEnd > 0 && ` · out:${clip.trimEnd.toFixed(1)}s`}
+            {(clip.duration / clip.speed).toFixed(1)}s
+            {clip.trimStart > 0 && ` · in:${(clip.trimStart / clip.speed).toFixed(1)}s`}
+            {clip.trimEnd > 0 && ` · out:${(clip.trimEnd / clip.speed).toFixed(1)}s`}
             {clip.speed !== 1 && ` ×${clip.speed}`}
           </span>
         </div>

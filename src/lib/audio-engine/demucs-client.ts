@@ -83,12 +83,12 @@ function writeString(view: DataView, offset: number, str: string) {
 
 export async function separateAudio(
   audioFile: File | Blob,
+  userId: string | undefined,
   mode: "vocals" | "music" | "drums" | "bass" = "vocals",
   onProgress?: (e: DemucsProgressEvent) => void,
 ): Promise<DemucsSeparationResult> {
   onProgress?.({ phase: "uploading", progress: 0, message: "Preparing audio..." });
 
-  // Ensure the audio is WAV for compatibility
   let file: File | Blob = audioFile;
   if (audioFile instanceof Blob && !(audioFile as File).name && !audioFile.type.startsWith("audio/wav")) {
     onProgress?.({ phase: "converting", progress: 0.1, message: "Converting to WAV..." });
@@ -100,17 +100,29 @@ export async function separateAudio(
 
   onProgress?.({ phase: "uploading", progress: 0.3, message: "Uploading audio..." });
 
-  const formData = new FormData();
-  formData.append("audio", file);
-  formData.append("mode", mode === "vocals" ? "2" : "4");
-  formData.append("stems", mode === "vocals" || mode === "music" ? "2" : "4");
+  let response: Response;
+
+  if (userId) {
+    const { uploadToR2 } = await import("@/lib/file-upload-client");
+    const { key } = await uploadToR2(file, userId);
+    const apiMode = mode === "vocals" ? "2" : "4";
+    response = await fetch("/api/audio/separate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ r2Key: key, mode: apiMode }),
+    });
+  } else {
+    const formData = new FormData();
+    formData.append("audio", file);
+    formData.append("mode", mode === "vocals" ? "2" : "4");
+    formData.append("stems", mode === "vocals" || mode === "music" ? "2" : "4");
+    response = await fetch("/api/audio/separate", {
+      method: "POST",
+      body: formData,
+    });
+  }
 
   onProgress?.({ phase: "uploading", progress: 0.5, message: "Sending to server..." });
-
-  const response = await fetch("/api/audio/separate", {
-    method: "POST",
-    body: formData,
-  });
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({ error: "Separation failed" }));

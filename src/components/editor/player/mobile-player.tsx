@@ -61,6 +61,13 @@ export function MobilePlayer() {
     }
   });
 
+  // Apply speed to video element
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !activeClip) return;
+    video.playbackRate = activeClip.speed;
+  }, [activeClip?.speed, activeClip?.src]);
+
   const progress = project.duration > 0 ? (playhead / project.duration) * 100 : 0;
 
   return (

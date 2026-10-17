@@ -9,8 +9,9 @@ export async function GET() {
     return new Response(JSON.stringify({ ok: true, processed }), {
       headers: { "Content-Type": "application/json" },
     });
-  } catch {
-    return new Response(JSON.stringify({ ok: true, processed: 0 }), {
+  } catch (error) {
+    return new Response(JSON.stringify({ ok: false, error: String(error) }), {
+      status: 500,
       headers: { "Content-Type": "application/json" },
     });
   }

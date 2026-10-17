@@ -1,10 +1,8 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.config";
 import { jsonResponse } from "@/lib/json";
-import { PrismaClient } from "@prisma/client";
+import { db } from "@/lib/db";
 import { z } from "zod";
-
-const prisma = new PrismaClient();
 
 const spendSchema = z.object({
   durationMinutes: z.number().min(0).default(0),
@@ -13,7 +11,7 @@ const spendSchema = z.object({
 async function getExportLimits(role: string) {
   const getInt = async (key: string, fallback: number) => {
     try {
-      const s = await prisma.platformSetting.findUnique({ where: { key } });
+      const s = await db.platformSetting.findUnique({ where: { key } });
       return s ? parseInt(s.value, 10) || fallback : fallback;
     } catch { return fallback; }
   };
@@ -29,7 +27,7 @@ async function getExportLimits(role: string) {
 
 async function countExportsSince(userId: string, since: Date): Promise<number> {
   try {
-    return await prisma.creditSpendLog.count({
+    return await db.creditSpendLog.count({
       where: { userId, feature: "export", createdAt: { gte: since } },
     });
   } catch { return 0; }
@@ -41,7 +39,7 @@ async function checkExportLimits(userId: string, role: string) {
 
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const weekStart = new Date(dayStart);
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
+  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const yearStart = new Date(now.getFullYear(), 0, 1);
 
@@ -89,8 +87,8 @@ export async function POST(request: Request) {
     const limits = await checkExportLimits(userId, role);
 
     if (limits.withinFreeLimit) {
-      await prisma.creditSpendLog.create({
-        data: { userId, feature: "export", credits: 0, reason: "Free export", balance: 0 },
+      await db.creditSpendLog.create({
+        data: { userId, feature: "export", credits: 0, reason: "Free export" },
       });
       return jsonResponse({ success: true, free: true, message: "Free export used" });
     }
@@ -98,7 +96,7 @@ export async function POST(request: Request) {
     const exportLimits = await getExportLimits(role);
     const creditsNeeded = exportLimits.creditsPerExport + Math.ceil(exportLimits.creditsPerMinute * Math.max(1, Math.ceil(durationMinutes)));
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await db.user.findUnique({ where: { id: userId } });
     if (!user || user.creditsBalance < creditsNeeded) {
       return jsonResponse({
         success: false,
@@ -109,7 +107,7 @@ export async function POST(request: Request) {
       }, { status: 402 });
     }
 
-    const updated = await prisma.user.updateMany({
+    const updated = await db.user.updateMany({
       where: { id: userId, creditsBalance: { gte: creditsNeeded } },
       data: { creditsBalance: { decrement: creditsNeeded } },
     });
@@ -118,13 +116,12 @@ export async function POST(request: Request) {
       return jsonResponse({ success: false, error: "Insufficient credits (race condition)" }, { status: 402 });
     }
 
-    await prisma.creditSpendLog.create({
+    await db.creditSpendLog.create({
       data: {
         userId,
         feature: "export",
         credits: creditsNeeded,
         reason: `Export: ${durationMinutes}min video`,
-        balance: (user.creditsBalance || 0) - creditsNeeded,
       },
     });
 

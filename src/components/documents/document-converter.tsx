@@ -156,7 +156,8 @@ export function DocumentConverter() {
     setResult(null);
 
     try {
-      const converted = convertContent(fromFormat, toFormat, content);
+      // Preserve contents: structured conversion with format-specific mapping
+      const converted = convertContent(fromFormat, toFormat, content, { preserveFormatting: true, preserveStructure: true });
       setResult(converted);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Conversion failed");

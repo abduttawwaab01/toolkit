@@ -74,6 +74,15 @@ export default function EditorPage() {
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [mobileSheet, setMobileSheet] = useState<{ open: boolean; panel: string }>({ open: false, panel: "" });
   const [showMobileTimeline, setShowMobileTimeline] = useState(false);
+  const [editorMode, setEditorMode] = useState<"quick" | "pro">("quick"); // Easiest vs Advanced
+
+  // Quick-mode preset: hides clutter, shows big AI/template actions
+  const quickActions = [
+    { label: "AI Text-to-Video", icon: "Wand2", action: () => setActivePanel("ai") },
+    { label: "Templates", icon: "LayoutTemplate", action: () => setActivePanel("templates") },
+    { label: "Audio", icon: "Music", action: () => setActivePanel("audio") },
+    { label: "Text", icon: "Type", action: () => setActivePanel("text") },
+  ];
 
   const userId = (session?.user as any)?.id as string | undefined;
   const isGuest = !userId;
@@ -257,8 +266,12 @@ export default function EditorPage() {
                 if (selectedClipId) {
                   const clip = clips.find((c) => c.id === selectedClipId);
                   const store = useEditorStore.getState();
-                  if (clip && store.playhead > clip.startTime && store.playhead < clip.startTime + clip.duration) {
-                    store.splitClip(selectedClipId, store.playhead);
+                  if (clip) {
+                    const effectiveDuration = clip.duration / clip.speed;
+                    const timelineEnd = clip.startTime + effectiveDuration;
+                    if (store.playhead > clip.startTime && store.playhead < timelineEnd) {
+                      store.splitClip(selectedClipId, store.playhead);
+                    }
                   }
                 }
               }}
@@ -303,6 +316,37 @@ export default function EditorPage() {
             </button>
           </div>
         </header>
+
+        {/* ─── Quick / Pro Mode Bar ─── */}
+        <div className="flex items-center justify-between px-4 py-2 bg-gradient-to-r from-neon-cyan/10 to-violet-500/10 border-b border-border-subtle backdrop-blur-md z-20">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setEditorMode("quick")}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all shadow-sm ${editorMode === "quick" ? "bg-neon-cyan text-black" : "glass text-text-secondary hover:text-white"}`}
+            >
+              ⚡ Quick (Easiest)
+            </button>
+            <button
+              onClick={() => setEditorMode("pro")}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all shadow-sm ${editorMode === "pro" ? "bg-violet-500 text-white" : "glass text-text-secondary hover:text-white"}`}
+            >
+              🎯 Pro Studio (Advanced)
+            </button>
+          </div>
+          {editorMode === "quick" && (
+            <div className="flex items-center gap-2">
+              {quickActions.map((a, idx) => (
+                <button
+                  key={idx}
+                  onClick={a.action}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium glass hover:bg-white/10 transition text-text-secondary hover:text-white border border-white/5"
+                >
+                  <Wand2 size={12} /> {a.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* ─── Main Body ─── */}
         <div className="flex flex-1 overflow-hidden">
@@ -603,7 +647,7 @@ function ClipsList({ clips, selectedClipId, tracks }: { clips: any[]; selectedCl
         >
           <GripVertical size={10} className="text-text-tertiary shrink-0" />
           <div className="flex-1 text-left truncate">{clip.name}</div>
-          <span className="text-[10px] text-text-tertiary tabular-nums">{clip.duration.toFixed(1)}s</span>
+          <span className="text-[10px] text-text-tertiary tabular-nums">{(clip.duration / clip.speed).toFixed(1)}s</span>
         </button>
       ))}
     </div>

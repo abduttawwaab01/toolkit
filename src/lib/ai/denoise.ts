@@ -21,22 +21,35 @@ export interface DenoiseOptions {
  */
 export async function denoiseAudioAI(
   audioFile: File,
+  userId: string | undefined,
   options: DenoiseOptions = {},
 ): Promise<DenoiseResult> {
   const { denoiseOnly = false, onProgress } = options;
+  const denoiseOnlyStr = String(denoiseOnly);
 
   onProgress?.(5);
 
-  const formData = new FormData();
-  formData.append("audio", audioFile);
-  formData.append("denoiseOnly", String(denoiseOnly));
+  let response: Response;
+
+  if (userId) {
+    const { uploadToR2 } = await import("@/lib/file-upload-client");
+    const { key } = await uploadToR2(audioFile, userId);
+    response = await fetch("/api/audio/denoise", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ r2Key: key, denoiseOnly: denoiseOnlyStr }),
+    });
+  } else {
+    const formData = new FormData();
+    formData.append("audio", audioFile);
+    formData.append("denoiseOnly", denoiseOnlyStr);
+    response = await fetch("/api/audio/denoise", {
+      method: "POST",
+      body: formData,
+    });
+  }
 
   onProgress?.(10);
-
-  const response = await fetch("/api/audio/denoise", {
-    method: "POST",
-    body: formData,
-  });
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: "Unknown error" }));

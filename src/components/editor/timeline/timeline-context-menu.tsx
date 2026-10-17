@@ -25,7 +25,9 @@ export function TimelineContextMenu({ clipId, x, y, open, onClose }: ContextMenu
 
       switch (action) {
         case "split": {
-          if (store.playhead > clip.startTime && store.playhead < clip.startTime + clip.duration) {
+          const effectiveDuration = clip.duration / clip.speed;
+          const timelineEnd = clip.startTime + effectiveDuration;
+          if (store.playhead > clip.startTime && store.playhead < timelineEnd) {
             store.splitClip(clipId, store.playhead);
           }
           break;
@@ -37,19 +39,25 @@ export function TimelineContextMenu({ clipId, x, y, open, onClose }: ContextMenu
           store.rippleDeleteClip(clipId);
           break;
         case "set-in-point": {
-          const newTrimStart = Math.max(0, store.playhead - clip.startTime);
+          const timelineDelta = Math.max(0, store.playhead - clip.startTime);
+          const sourceDelta = timelineDelta * clip.speed;
+          const newTrimStart = Math.max(0, clip.trimStart + sourceDelta);
+          const newDuration = Math.max(0.1, clip.duration - sourceDelta);
           store.updateClip(clipId, {
-            trimStart: newTrimStart + clip.trimStart,
-            duration: clip.duration - newTrimStart,
+            trimStart: newTrimStart,
+            duration: newDuration,
             startTime: store.playhead,
           });
           break;
         }
         case "set-out-point": {
-          const newTrimEnd = Math.max(0, clip.startTime + clip.duration - store.playhead);
+          const timelineDelta = Math.max(0, clip.startTime + (clip.duration / clip.speed) - store.playhead);
+          const sourceDelta = timelineDelta * clip.speed;
+          const newTrimEnd = Math.max(0, clip.trimEnd + sourceDelta);
+          const newDuration = Math.max(0.1, clip.duration - sourceDelta);
           store.updateClip(clipId, {
-            trimEnd: newTrimEnd + clip.trimEnd,
-            duration: Math.max(0.1, store.playhead - clip.startTime),
+            trimEnd: newTrimEnd,
+            duration: newDuration,
           });
           break;
         }

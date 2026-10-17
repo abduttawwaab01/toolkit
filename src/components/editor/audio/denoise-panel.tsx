@@ -34,7 +34,7 @@ export function DenoisePanel() {
       const originalUrl = URL.createObjectURL(file);
 
       if (mode === "ai") {
-        const aiResult = await denoiseAudioAI(file, {
+        const aiResult = await denoiseAudioAI(file, undefined, {
           denoiseOnly: false,
           onProgress: setProgress,
         });

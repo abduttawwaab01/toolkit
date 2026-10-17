@@ -182,20 +182,24 @@ export function stopSpeaking() {
 
 export async function transcribeAudioFile(
   audioBlob: Blob,
-  apiKey: string,
+  userId: string | undefined,
   language?: string,
 ): Promise<{ text: string; segments: { start: number; end: number; text: string }[] }> {
-  const buffer = await audioBlob.arrayBuffer();
-  const base64 = arrayBufferToBase64(buffer);
+  let body: Record<string, any> = { feature: "transcribe", language: language || "en" };
+
+  if (userId) {
+    const { uploadToR2 } = await import("@/lib/file-upload-client");
+    const { key } = await uploadToR2(new File([audioBlob], "audio.wav", { type: audioBlob.type || "audio/wav" }), userId);
+    body.r2Key = key;
+  } else {
+    const buffer = await audioBlob.arrayBuffer();
+    body.audio = arrayBufferToBase64(buffer);
+  }
 
   const res = await fetch("/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      feature: "transcribe",
-      audio: base64,
-      language: language || "en",
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {

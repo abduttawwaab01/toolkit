@@ -60,6 +60,13 @@ export function Player() {
     };
   }, [selectedClip, playhead]);
 
+  // ─── Sync: clip speed → video playbackRate ───
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !selectedClip) return;
+    video.playbackRate = selectedClip.speed;
+  }, [selectedClip?.speed, videoSrc]);
+
   // ─── Sync: store → video (external playhead/timeline seek) ───
   useEffect(() => {
     const video = videoRef.current;

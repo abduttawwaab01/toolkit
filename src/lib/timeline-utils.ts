@@ -143,8 +143,9 @@ export function hasOverlap(
   newStartTime: number,
   newDuration: number,
   allClips: Array<{ id: string; trackId: string; startTime: number; duration: number; speed: number }>,
+  newSpeed: number = 1,
 ): boolean {
-  const newEnd = newStartTime + newDuration;
+  const newEnd = newStartTime + newDuration / newSpeed;
   for (const clip of allClips) {
     if (clip.id === clipId || clip.trackId !== trackId) continue;
     const clipEnd = clip.startTime + clip.duration / clip.speed;

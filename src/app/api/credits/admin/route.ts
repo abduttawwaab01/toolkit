@@ -93,7 +93,6 @@ export async function PUT(req: NextRequest) {
           feature: "purchase",
           credits: request.credits,
           reason: "purchase approved",
-          balance: 0,
         },
       }),
     ]);

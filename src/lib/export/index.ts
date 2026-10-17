@@ -1,7 +1,7 @@
 import type { ExportSettings, ExportProgress, ExportStage } from "@/types/export";
 import { FORMAT_INFO, RESOLUTIONS } from "@/types/export";
 import type { Clip } from "@/types/editor";
-import { buildEffectChain } from "@/lib/audio-engine/player-processor";
+import { cssFilterFromEffects, cssTransformFromClip } from "@/lib/effects/index";
 import { GifEncoder } from "./gif-encoder";
 import {
   getFFmpeg,
@@ -63,7 +63,7 @@ export class ExportEngine {
         percent: Math.min(100, percent),
         elapsedMs: elapsed,
         etaMs: eta,
-        speed: eta > 0 ? (100 / (elapsed + eta)) * 1000 / 1000 + "x" : "0x",
+        speed: extra?.currentFrame && elapsed > 0 ? `${((extra.currentFrame) / (elapsed / 1000)).toFixed(1)}fps` : "0x",
         ...extra,
       }),
     );
@@ -366,9 +366,37 @@ export class ExportEngine {
         }
 
         ctx.clearRect(0, 0, outW, outH);
-        if (video) { try { video.currentTime = time; } catch {} ctx.drawImage(video, 0, 0, outW, outH); }
-        else if (canvas) { ctx.drawImage(canvas, 0, 0, outW, outH); }
-        else { ctx.fillStyle = "#0a0a0f"; ctx.fillRect(0, 0, outW, outH); }
+
+        // Find active video clip and apply speed + effects
+        const activeClip = state.clips.find(
+          (c: Clip) => c.type === "video" && c.src && time >= c.startTime && time < c.startTime + c.duration / c.speed,
+        );
+
+        if (activeClip && video) {
+          const relTime = time - activeClip.startTime;
+          const seekTime = activeClip.trimStart + relTime * activeClip.speed;
+          try { video.currentTime = seekTime; } catch {}
+
+          ctx.save();
+          ctx.globalAlpha = activeClip.opacity ?? 1;
+          ctx.translate(outW / 2 + (activeClip.positionX || 0), outH / 2 + (activeClip.positionY || 0));
+          ctx.scale(activeClip.scale || 1, activeClip.scale || 1);
+          ctx.rotate(((activeClip.rotation || 0) * Math.PI) / 180);
+          ctx.drawImage(video, -outW / 2, -outH / 2, outW, outH);
+
+          const filter = cssFilterFromEffects(activeClip.effects);
+          if (filter) {
+            ctx.filter = filter;
+            ctx.drawImage(video, -outW / 2, -outH / 2, outW, outH);
+            ctx.filter = "none";
+          }
+          ctx.restore();
+        } else if (canvas) {
+          ctx.drawImage(canvas, 0, 0, outW, outH);
+        } else {
+          ctx.fillStyle = "#0a0a0f";
+          ctx.fillRect(0, 0, outW, outH);
+        }
 
         if (hasTextClips && this.settings.includeSubtitles) {
           this.renderTextOverlays(ctx, state.clips, time, outW, outH);
@@ -399,9 +427,38 @@ export class ExportEngine {
   ) {
     ctx.clearRect(0, 0, width, height);
 
-    if (video) {
-      try { video.currentTime = time; } catch {}
-      ctx.drawImage(video, 0, 0, width, height);
+    // Find the active video clip at this time
+    const activeVideoClips = state.clips.filter(
+      (c: Clip) => c.type === "video" && c.src && time >= c.startTime && time < c.startTime + c.duration / c.speed,
+    );
+
+    if (activeVideoClips.length > 0 && video) {
+      // Render each active video clip (usually just one, but handle overlaps)
+      for (const clip of activeVideoClips) {
+        const relTime = time - clip.startTime;
+        // Seek to the correct source position: trimStart + relTime * speed
+        const seekTime = clip.trimStart + relTime * clip.speed;
+        try { video.currentTime = seekTime; } catch {}
+
+        ctx.save();
+
+        // Apply clip transforms (position, scale, rotation, opacity)
+        ctx.globalAlpha = clip.opacity ?? 1;
+        ctx.translate(width / 2 + (clip.positionX || 0), height / 2 + (clip.positionY || 0));
+        ctx.scale(clip.scale || 1, clip.scale || 1);
+        ctx.rotate(((clip.rotation || 0) * Math.PI) / 180);
+        ctx.drawImage(video, -width / 2, -height / 2, width, height);
+
+        // Apply CSS effects as canvas filters
+        const filter = cssFilterFromEffects(clip.effects);
+        if (filter) {
+          ctx.filter = filter;
+          ctx.drawImage(video, -width / 2, -height / 2, width, height);
+          ctx.filter = "none";
+        }
+
+        ctx.restore();
+      }
     } else if (canvas) {
       ctx.drawImage(canvas, 0, 0, width, height);
     } else {
@@ -416,21 +473,25 @@ export class ExportEngine {
 
     // Fade in/out
     for (const clip of state.clips) {
+      const effectiveDuration = clip.duration / clip.speed;
       const relTime = time - clip.startTime;
-      if (relTime < 0 || relTime > clip.duration) continue;
+      if (relTime < 0 || relTime > effectiveDuration) continue;
       if (clip.fadeIn && relTime < clip.fadeIn) {
         ctx.save();
         ctx.fillStyle = `rgba(0,0,0,${1 - relTime / clip.fadeIn})`;
         ctx.fillRect(0, 0, width, height);
         ctx.restore();
       }
-      if (clip.fadeOut && clip.duration - relTime < clip.fadeOut) {
+      if (clip.fadeOut && effectiveDuration - relTime < clip.fadeOut) {
         ctx.save();
-        ctx.fillStyle = `rgba(0,0,0,${1 - (clip.duration - relTime) / clip.fadeOut})`;
+        ctx.fillStyle = `rgba(0,0,0,${1 - (effectiveDuration - relTime) / clip.fadeOut})`;
         ctx.fillRect(0, 0, width, height);
         ctx.restore();
       }
     }
+
+    // Render transitions
+    this.renderTransitions(ctx, state, time, width, height, video);
   }
 
   private renderTextOverlays(
@@ -506,6 +567,133 @@ export class ExportEngine {
       ctx.fillStyle = ts?.color || "#ffffff";
       ctx.fillText(text, x, y);
       ctx.restore();
+    }
+  }
+
+  // ─── Transition Rendering ────────────────────────────────────────────
+
+  private renderTransitions(
+    ctx: CanvasRenderingContext2D,
+    state: any,
+    time: number,
+    width: number,
+    height: number,
+    video: HTMLVideoElement | null,
+  ) {
+    if (!state.transitions || state.transitions.length === 0 || !video) return;
+
+    for (const transition of state.transitions) {
+      const clipIn = state.clips.find((c: Clip) => c.id === transition.clipInId);
+      const clipOut = state.clips.find((c: Clip) => c.id === transition.clipOutId);
+      if (!clipIn || !clipOut) continue;
+
+      const clipInEnd = clipIn.startTime + clipIn.duration / clipIn.speed;
+      const transitionStart = clipInEnd - transition.duration;
+      const transitionEnd = clipInEnd;
+
+      if (time < transitionStart || time > transitionEnd) continue;
+
+      const progress = (time - transitionStart) / transition.duration;
+
+      switch (transition.type) {
+        case "crossfade": {
+          // Draw outgoing clip with decreasing opacity
+          ctx.save();
+          ctx.globalAlpha = 1 - progress;
+          const outRelTime = time - clipOut.startTime;
+          const outSeekTime = clipOut.trimStart + outRelTime * clipOut.speed;
+          try { video.currentTime = outSeekTime; } catch {}
+          ctx.drawImage(video, 0, 0, width, height);
+          ctx.restore();
+          break;
+        }
+        case "fade-to-black": {
+          ctx.save();
+          ctx.fillStyle = `rgba(0,0,0,${progress})`;
+          ctx.fillRect(0, 0, width, height);
+          ctx.restore();
+          break;
+        }
+        case "fade-to-white": {
+          ctx.save();
+          ctx.fillStyle = `rgba(255,255,255,${progress})`;
+          ctx.fillRect(0, 0, width, height);
+          ctx.restore();
+          break;
+        }
+        case "slide-left": {
+          ctx.save();
+          ctx.translate(-width * progress, 0);
+          const outRelTime = time - clipOut.startTime;
+          const outSeekTime = clipOut.trimStart + outRelTime * clipOut.speed;
+          try { video.currentTime = outSeekTime; } catch {}
+          ctx.drawImage(video, 0, 0, width, height);
+          ctx.restore();
+          break;
+        }
+        case "slide-right": {
+          ctx.save();
+          ctx.translate(width * progress, 0);
+          const outRelTime = time - clipOut.startTime;
+          const outSeekTime = clipOut.trimStart + outRelTime * clipOut.speed;
+          try { video.currentTime = outSeekTime; } catch {}
+          ctx.drawImage(video, 0, 0, width, height);
+          ctx.restore();
+          break;
+        }
+        case "wipe-left": {
+          ctx.save();
+          const outRelTime = time - clipOut.startTime;
+          const outSeekTime = clipOut.trimStart + outRelTime * clipOut.speed;
+          try { video.currentTime = outSeekTime; } catch {}
+          ctx.beginPath();
+          ctx.rect(0, 0, width * progress, height);
+          ctx.clip();
+          ctx.drawImage(video, 0, 0, width, height);
+          ctx.restore();
+          break;
+        }
+        case "wipe-right": {
+          ctx.save();
+          const outRelTime = time - clipOut.startTime;
+          const outSeekTime = clipOut.trimStart + outRelTime * clipOut.speed;
+          try { video.currentTime = outSeekTime; } catch {}
+          ctx.beginPath();
+          ctx.rect(width * (1 - progress), 0, width * progress, height);
+          ctx.clip();
+          ctx.drawImage(video, 0, 0, width, height);
+          ctx.restore();
+          break;
+        }
+        case "zoom-in": {
+          ctx.save();
+          const scale = 1 + progress * 0.5;
+          ctx.translate(width / 2, height / 2);
+          ctx.scale(scale, scale);
+          ctx.translate(-width / 2, -height / 2);
+          ctx.globalAlpha = 1 - progress;
+          const outRelTime = time - clipOut.startTime;
+          const outSeekTime = clipOut.trimStart + outRelTime * clipOut.speed;
+          try { video.currentTime = outSeekTime; } catch {}
+          ctx.drawImage(video, 0, 0, width, height);
+          ctx.restore();
+          break;
+        }
+        case "zoom-out": {
+          ctx.save();
+          const scale = 1.5 - progress * 0.5;
+          ctx.translate(width / 2, height / 2);
+          ctx.scale(scale, scale);
+          ctx.translate(-width / 2, -height / 2);
+          ctx.globalAlpha = 1 - progress;
+          const outRelTime = time - clipOut.startTime;
+          const outSeekTime = clipOut.trimStart + outRelTime * clipOut.speed;
+          try { video.currentTime = outSeekTime; } catch {}
+          ctx.drawImage(video, 0, 0, width, height);
+          ctx.restore();
+          break;
+        }
+      }
     }
   }
 

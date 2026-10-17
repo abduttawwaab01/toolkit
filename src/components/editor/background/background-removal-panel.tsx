@@ -37,7 +37,7 @@ export function BackgroundRemovalPanel() {
     setAiResult(null);
 
     try {
-      const result = await removeBackgroundAI(file, {
+      const result = await removeBackgroundAI(file, undefined, {
         onProgress: setAiProgress,
       });
       setAiResult(result.image);

@@ -15,18 +15,38 @@ export interface VoiceCloneOptions {
   onProgress?: (progress: number) => void;
 }
 
-export async function cloneVoice(options: VoiceCloneOptions): Promise<VoiceCloneResult> {
-  const formData = new FormData();
-  formData.append("name", options.name);
-  if (options.description) formData.append("description", options.description);
-  options.audioFiles.forEach((file) => formData.append("files", file));
+export async function cloneVoice(
+  options: VoiceCloneOptions,
+  userId?: string,
+): Promise<VoiceCloneResult> {
+  let res: Response;
 
-  options.onProgress?.(10);
-
-  const res = await fetch("/api/ai/voice-clone", {
-    method: "POST",
-    body: formData,
-  });
+  if (userId) {
+    const { uploadToR2 } = await import("@/lib/file-upload-client");
+    const r2Keys = await Promise.all(
+      options.audioFiles.map((file) => uploadToR2(file, userId).then((r) => r.key)),
+    );
+    options.onProgress?.(10);
+    res = await fetch("/api/ai/voice-clone", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: options.name,
+        description: options.description,
+        r2Keys,
+      }),
+    });
+  } else {
+    const formData = new FormData();
+    formData.append("name", options.name);
+    if (options.description) formData.append("description", options.description);
+    options.audioFiles.forEach((file) => formData.append("files", file));
+    options.onProgress?.(10);
+    res = await fetch("/api/ai/voice-clone", {
+      method: "POST",
+      body: formData,
+    });
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Voice cloning failed" }));

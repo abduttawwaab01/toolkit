@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.config";
 import { db } from "@/lib/db";
+import { resolveFile, isBodyTooLarge } from "@/lib/r2-file-helper";
 
 export const runtime = "nodejs";
 
@@ -10,10 +11,14 @@ export async function POST(req: NextRequest) {
     const session = await getServerSession(authOptions);
     const userId = (session?.user as any)?.id as string | undefined;
 
-    const formData = await req.formData();
-    const imageFile = formData.get("image") as File | null;
+    if (isBodyTooLarge(req)) {
+      return NextResponse.json({
+        error: "File too large. Upload to R2 first via /api/media/presign, then POST with { r2Key }.",
+      }, { status: 413 });
+    }
 
-    if (!imageFile) {
+    const { file: fileResult } = await resolveFile(req, "image");
+    if (!fileResult) {
       return NextResponse.json({ error: "No image file provided" }, { status: 400 });
     }
 
@@ -26,7 +31,7 @@ export async function POST(req: NextRequest) {
 
     const start = Date.now();
 
-    const arrayBuffer = await imageFile.arrayBuffer();
+    const arrayBuffer = fileResult.buffer;
 
     const { removeBackground } = await import("@imgly/background-removal");
     const resultBlob = await removeBackground(arrayBuffer);

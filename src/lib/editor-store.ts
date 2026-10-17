@@ -289,21 +289,28 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   splitClip: (clipId, splitTime) => {
     const clip = get().clips.find((c) => c.id === clipId);
     if (!clip) return;
-    if (splitTime <= clip.startTime || splitTime >= clip.startTime + clip.duration) return;
+    // Calculate the effective timeline end: clip occupies duration/speed seconds on timeline
+    const effectiveDuration = clip.duration / clip.speed;
+    const timelineEnd = clip.startTime + effectiveDuration;
+    if (splitTime <= clip.startTime || splitTime >= timelineEnd) return;
 
     get().pushHistory();
 
-    const newDuration = splitTime - clip.startTime;
-    const splitDuration = clip.duration - newDuration;
+    // Convert the timeline split point to source-media time
+    const timelineOffset = splitTime - clip.startTime;
+    const sourceOffset = timelineOffset * clip.speed;
+
+    const newDuration = sourceOffset;
+    const splitDuration = clip.duration - sourceOffset;
 
     set((s) => ({
       clips: [
-        ...s.clips.map((c) => (c.id === clipId ? { ...c, duration: newDuration } : c)),
+        ...s.clips.map((c) => (c.id === clipId ? { ...c, duration: Math.max(0.1, newDuration) } : c)),
         {
           ...clip,
           id: uuid(),
           startTime: splitTime,
-          duration: splitDuration,
+          duration: Math.max(0.1, splitDuration),
           trimStart: clip.trimStart + newDuration,
         },
       ],
@@ -409,13 +416,15 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     const clip = get().clips.find((c) => c.id === id);
     if (!clip) return;
     get().pushHistory();
-    const deletedEnd = clip.startTime + clip.duration;
+    // Use effective timeline duration for ripple
+    const effectiveDuration = clip.duration / clip.speed;
+    const deletedEnd = clip.startTime + effectiveDuration;
     set((s) => ({
       clips: s.clips
         .filter((c) => c.id !== id)
         .map((c) =>
           c.trackId === clip.trackId && c.startTime >= deletedEnd
-            ? { ...c, startTime: Math.max(0, c.startTime - clip.duration) }
+            ? { ...c, startTime: Math.max(0, c.startTime - effectiveDuration) }
             : c,
         ),
       selectedClipId: s.selectedClipId === id ? null : s.selectedClipId,

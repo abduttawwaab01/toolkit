@@ -3,21 +3,27 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.config";
 import { db } from "@/lib/db";
 import { enqueueJob } from "@/lib/job-queue";
+import { resolveFile, isBodyTooLarge } from "@/lib/r2-file-helper";
 
-const MAX_SYNC_SIZE = 100 * 1024 * 1024; // 100MB — process sync; job queue is wired for future use
+const MAX_SYNC_SIZE = 100 * 1024 * 1024;
 
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const userId = (session?.user as any)?.id as string | undefined;
 
-    const formData = await req.formData();
-    const audioFile = formData.get("audio") as File | null;
-    const mode = (formData.get("mode") as string) || "4";
+    if (isBodyTooLarge(req)) {
+      return NextResponse.json({
+        error: "File too large. Upload to R2 first via /api/media/presign, then POST with { r2Key, mode }.",
+      }, { status: 413 });
+    }
 
-    if (!audioFile) {
+    const { file: fileResult, fields } = await resolveFile(req, "audio");
+    if (!fileResult) {
       return NextResponse.json({ error: "No audio file provided" }, { status: 400 });
     }
+
+    const mode = (fields.mode as string) || "4";
 
     if (!["2", "4"].includes(mode)) {
       return NextResponse.json({ error: "Invalid mode; use '2' or '4'" }, { status: 400 });
@@ -31,16 +37,14 @@ export async function POST(req: NextRequest) {
     }
 
     const start = Date.now();
-    const arrayBuffer = await audioFile.arrayBuffer();
-    const initialBuffer = Buffer.from(arrayBuffer);
-    let audioBuffer: Buffer = initialBuffer;
+    let audioBuffer: Buffer = fileResult.buffer;
 
     // Convert non-WAV to WAV via FFmpeg WASM (client-side wrapper on server)
     const isWav = audioBuffer.length > 4 && audioBuffer.toString("ascii", 0, 4) === "RIFF";
     if (!isWav) {
       try {
         const { convertToWav } = await import("@/lib/audio-engine/convert-to-wav");
-        audioBuffer = Buffer.from(await convertToWav(audioBuffer, audioFile.type));
+        audioBuffer = Buffer.from(await convertToWav(audioBuffer, fileResult.mimeType));
       } catch {
         return NextResponse.json({
           error: "Could not convert audio to WAV. Please upload a WAV file or install ffmpeg on the server.",

@@ -37,7 +37,7 @@ export function AudioProcessing() {
 
       try {
         setAiProgress("AI Demucs model processing...");
-        const result = await separateAudio(file, mode, (e) => {
+        const result = await separateAudio(file, undefined, mode, (e) => {
           setAiProgress(`${e.message} (${Math.round(e.progress * 100)}%)`);
         });
 

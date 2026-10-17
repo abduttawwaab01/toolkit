@@ -52,3 +52,14 @@ export async function getSignedUploadUrl(key: string, contentType: string, expir
 export function getPublicUrl(key: string) {
   return `${PUBLIC_URL}/${key}`;
 }
+
+/**
+ * Download a file from R2 by its storage key.
+ * Used by API routes to process files that were uploaded directly via presigned URL.
+ */
+export async function downloadFromR2(key: string): Promise<Buffer> {
+  const response = await r2.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
+  const body = response.Body;
+  if (!body) throw new Error(`Empty response for key: ${key}`);
+  return Buffer.from(await body.transformToByteArray());
+}

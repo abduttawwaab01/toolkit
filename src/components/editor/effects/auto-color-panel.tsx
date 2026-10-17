@@ -28,17 +28,105 @@ export function AutoColorPanel() {
     setApplying(presetId);
     pushHistory();
 
-    if (presetId === "auto") {
-      addEffectToClip(selectedClipId, "brightness");
-      addEffectToClip(selectedClipId, "contrast");
-      addEffectToClip(selectedClipId, "saturate");
-      addEffectToClip(selectedClipId, "cinematic");
-    } else {
-      const preset = STYLE_PRESETS.find((p) => p.id === presetId);
-      if (preset) {
+    switch (presetId) {
+      case "auto": {
         addEffectToClip(selectedClipId, "brightness");
         addEffectToClip(selectedClipId, "contrast");
         addEffectToClip(selectedClipId, "saturate");
+        addEffectToClip(selectedClipId, "cinematic");
+        break;
+      }
+      case "cinematic": {
+        addEffectToClip(selectedClipId, "contrast");
+        addEffectToClip(selectedClipId, "saturation");
+        addEffectToClip(selectedClipId, "temperature");
+        addEffectToClip(selectedClipId, "cinematic");
+        const clip = clips.find((c) => c.id === selectedClipId);
+        const contrastFx = clip?.effects.find((e) => e.type === "contrast");
+        const satFx = clip?.effects.find((e) => e.type === "saturation");
+        const tempFx = clip?.effects.find((e) => e.type === "temperature");
+        if (contrastFx) updateEffectParam(selectedClipId, contrastFx.id, "amount", 15);
+        if (satFx) updateEffectParam(selectedClipId, satFx.id, "amount", -20);
+        if (tempFx) updateEffectParam(selectedClipId, tempFx.id, "amount", 10);
+        break;
+      }
+      case "vintage": {
+        addEffectToClip(selectedClipId, "brightness");
+        addEffectToClip(selectedClipId, "contrast");
+        addEffectToClip(selectedClipId, "saturation");
+        addEffectToClip(selectedClipId, "sepia");
+        const clip = clips.find((c) => c.id === selectedClipId);
+        const brightFx = clip?.effects.find((e) => e.type === "brightness");
+        const contrastFx = clip?.effects.find((e) => e.type === "contrast");
+        const satFx = clip?.effects.find((e) => e.type === "saturation");
+        if (brightFx) updateEffectParam(selectedClipId, brightFx.id, "amount", -5);
+        if (contrastFx) updateEffectParam(selectedClipId, contrastFx.id, "amount", -10);
+        if (satFx) updateEffectParam(selectedClipId, satFx.id, "amount", -30);
+        break;
+      }
+      case "noir": {
+        addEffectToClip(selectedClipId, "contrast");
+        addEffectToClip(selectedClipId, "saturation");
+        addEffectToClip(selectedClipId, "grayscale");
+        addEffectToClip(selectedClipId, "noir");
+        const clip = clips.find((c) => c.id === selectedClipId);
+        const contrastFx = clip?.effects.find((e) => e.type === "contrast");
+        if (contrastFx) updateEffectParam(selectedClipId, contrastFx.id, "amount", 40);
+        break;
+      }
+      case "warm": {
+        addEffectToClip(selectedClipId, "brightness");
+        addEffectToClip(selectedClipId, "saturation");
+        addEffectToClip(selectedClipId, "temperature");
+        addEffectToClip(selectedClipId, "vibrance");
+        const clip = clips.find((c) => c.id === selectedClipId);
+        const brightFx = clip?.effects.find((e) => e.type === "brightness");
+        const tempFx = clip?.effects.find((e) => e.type === "temperature");
+        const satFx = clip?.effects.find((e) => e.type === "saturation");
+        const vibFx = clip?.effects.find((e) => e.type === "vibrance");
+        if (brightFx) updateEffectParam(selectedClipId, brightFx.id, "amount", 5);
+        if (tempFx) updateEffectParam(selectedClipId, tempFx.id, "amount", 35);
+        if (satFx) updateEffectParam(selectedClipId, satFx.id, "amount", 15);
+        if (vibFx) updateEffectParam(selectedClipId, vibFx.id, "amount", 20);
+        break;
+      }
+      case "cool": {
+        addEffectToClip(selectedClipId, "brightness");
+        addEffectToClip(selectedClipId, "saturation");
+        addEffectToClip(selectedClipId, "temperature");
+        addEffectToClip(selectedClipId, "contrast");
+        const clip = clips.find((c) => c.id === selectedClipId);
+        const brightFx = clip?.effects.find((e) => e.type === "brightness");
+        const tempFx = clip?.effects.find((e) => e.type === "temperature");
+        const satFx = clip?.effects.find((e) => e.type === "saturation");
+        const contrastFx = clip?.effects.find((e) => e.type === "contrast");
+        if (brightFx) updateEffectParam(selectedClipId, brightFx.id, "amount", 3);
+        if (tempFx) updateEffectParam(selectedClipId, tempFx.id, "amount", -40);
+        if (satFx) updateEffectParam(selectedClipId, satFx.id, "amount", 10);
+        if (contrastFx) updateEffectParam(selectedClipId, contrastFx.id, "amount", 10);
+        break;
+      }
+      case "dramatic": {
+        addEffectToClip(selectedClipId, "contrast");
+        addEffectToClip(selectedClipId, "saturation");
+        addEffectToClip(selectedClipId, "brightness");
+        addEffectToClip(selectedClipId, "vibrance");
+        addEffectToClip(selectedClipId, "shadows");
+        addEffectToClip(selectedClipId, "highlights");
+        const clip = clips.find((c) => c.id === selectedClipId);
+        const contrastFx = clip?.effects.find((e) => e.type === "contrast");
+        const satFx = clip?.effects.find((e) => e.type === "saturation");
+        const brightFx = clip?.effects.find((e) => e.type === "brightness");
+        const vibFx = clip?.effects.find((e) => e.type === "vibrance");
+        const shadowFx = clip?.effects.find((e) => e.type === "shadows");
+        const highlightFx = clip?.effects.find((e) => e.type === "highlights");
+        if (contrastFx) updateEffectParam(selectedClipId, contrastFx.id, "amount", 35);
+        if (satFx) updateEffectParam(selectedClipId, satFx.id, "amount", -15);
+        if (brightFx) updateEffectParam(selectedClipId, brightFx.id, "amount", -8);
+        if (vibFx) updateEffectParam(selectedClipId, vibFx.id, "amount", 25);
+        if (shadowFx) updateEffectParam(selectedClipId, shadowFx.id, "amount", -20);
+        if (highlightFx) updateEffectParam(selectedClipId, highlightFx.id, "amount", 15);
+        break;
       }
     }
 
